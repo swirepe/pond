@@ -16,6 +16,7 @@
       --ui-bg-color-solid: hsl(var(--base-hue), 15%, 15%);
       --ui-border-color: hsl(var(--base-hue), 15%, 30%);
       --ui-accent-color: hsl(var(--base-hue), 50%, 50%);
+      --ui-accent-hover-color: hsl(var(--base-hue), 50%, 60%);
 
 
       --plant-color: hsl(calc(var(--base-hue) + 120), 60%, 50%);
@@ -530,14 +531,25 @@
     .border-opacity-30 { border-color: hsla(var(--base-hue), 15%, 30%, 0.3); }
 
     .bg-\[hsl\(var\(--base-hue\),15%,10%\)\] { background-color: hsl(var(--base-hue),15%,10%); }
-    .bg-\[hsl\(var\(--base-hue\),40%,45%\)\] { background-color: hsl(var(--base-hue),40%,45%); }
-    .hover\:bg-\[hsl\(var\(--base-hue\),40%,55%\)\]:hover { background-color: hsl(var(--base-hue),40%,55%); }
-    .bg-\[hsl\(var\(--base-hue\),45%,45%\)\] { background-color: hsl(var(--base-hue),45%,45%); }
-    .hover\:bg-\[hsl\(var\(--base-hue\),45%,55%\)\]:hover { background-color: hsl(var(--base-hue),45%,55%); }
-    .bg-\[hsl\(var\(--base-hue\),50%,50%\)\] { background-color: hsl(var(--base-hue),50%,50%); }
-    .hover\:bg-\[hsl\(var\(--base-hue\),50%,60%\)\]:hover { background-color: hsl(var(--base-hue),50%,60%); }
-    .bg-\[hsl\(var\(--base-hue\),60%,50%\)\] { background-color: hsl(var(--base-hue),60%,50%); }
-    .hover\:bg-\[hsl\(var\(--base-hue\),60%,60%\)\]:hover { background-color: hsl(var(--base-hue),60%,60%); }
+
+    .btn {
+      --btn-bg: var(--ui-accent-color);
+      --btn-bg-hover: var(--ui-accent-hover-color);
+      display: block;
+      width: 100%;
+      padding: 0.5rem;
+      margin-top: 0.5rem;
+      border-radius: 0.375rem;
+      border: none;
+      box-sizing: border-box;
+      text-align: center;
+      cursor: pointer;
+      color: #ffffff;
+      background-color: var(--btn-bg);
+    }
+    .btn:hover {
+      background-color: var(--btn-bg-hover);
+    }
 
     @media (min-width: 768px) {
       .md\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -704,20 +716,17 @@
     </div>
     <div class="control-group">
       <h3>Data Management</h3>
-      <button id="exportRunsButton"
-        class="w-full p-2 mt-2 rounded-md bg-[hsl(var(--base-hue),40%,45%)] hover:bg-[hsl(var(--base-hue),40%,55%)] text-white">Export
+      <button id="exportRunsButton" class="btn" style="--btn-bg:hsl(var(--base-hue),40%,45%);--btn-bg-hover:hsl(var(--base-hue),40%,55%);">Export
         Runs Data</button>
       <label for="importRunsFile"
-        class="file-input-label w-full p-2 mt-2 rounded-md bg-[hsl(var(--base-hue),45%,45%)] hover:bg-[hsl(var(--base-hue),45%,55%)] text-white">
+        class="file-input-label btn">
         Import Runs Data
       </label>
       <input type="file" id="importRunsFile" accept=".json" class="hidden-file-input">
     </div>
-    <button id="resetSimulation"
-      class="w-full p-2 mt-2 rounded-md bg-[hsl(var(--base-hue),50%,50%)] hover:bg-[hsl(var(--base-hue),50%,60%)] text-white">Reset
+    <button id="resetSimulation" class="btn">Reset
       Simulation</button>
-    <button id="autoPilotRun"
-      class="w-full p-2 mt-2 rounded-md bg-[hsl(var(--base-hue),60%,50%)] hover:bg-[hsl(var(--base-hue),60%,60%)] text-white">Suggest
+    <button id="autoPilotRun" class="btn" style="--btn-bg:hsl(var(--base-hue),60%,50%);--btn-bg-hover:hsl(var(--base-hue),60%,60%);">Suggest
       & Start Next Run</button>
   </div>
 
@@ -731,8 +740,7 @@
 
 
   <div id="pastRunsViewContainer" style="display: none;">
-    <button id="backToSimulationButton"
-      class="fixed top-5 right-5 p-2 rounded-md bg-[hsl(var(--base-hue),50%,50%)] hover:bg-[hsl(var(--base-hue),50%,60%)] text-white mb-4 z-10">Back
+    <button id="backToSimulationButton" class="fixed top-5 right-5 btn mb-4 z-10" style="width:auto;">Back
       to Simulation</button>
     <h2 class="text-2xl font-bold mb-6 text-center mt-4">Past Runs Summary</h2>
 
@@ -2689,6 +2697,12 @@ function updateCurrentBNPredictionsDisplay() {
           }, 0);
         }
         document.body.style.overflow = 'auto'; // Allow scrolling in past runs view
+        // Hide overlays and their toggles when viewing past runs
+        DOM_ELEMENTS.statsOverlay.classList.remove('visible');
+        DOM_ELEMENTS.controlsOverlay.classList.remove('visible');
+        DOM_ELEMENTS.statsToggle.style.display = 'none';
+        DOM_ELEMENTS.controlsToggle.style.display = 'none';
+        DOM_ELEMENTS.pastRunsToggleMain.style.display = 'none';
         populatePastRunsSummaryList();
         DOM_ELEMENTS.pastRunDetails.style.display = 'none'; // Hide details initially
       });
@@ -2704,6 +2718,10 @@ function updateCurrentBNPredictionsDisplay() {
           animationFrameId = requestAnimationFrame(gameLoop);
         }
         DOM_ELEMENTS.currentRunInfo.classList.add('visible');
+        // Show overlay toggles again when returning to simulation
+        DOM_ELEMENTS.statsToggle.style.display = 'block';
+        DOM_ELEMENTS.controlsToggle.style.display = 'block';
+        DOM_ELEMENTS.pastRunsToggleMain.style.display = 'block';
       });
       DOM_ELEMENTS.currentRunInfo.classList.add('visible'); // Show current run info by default
 
