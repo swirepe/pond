@@ -2790,6 +2790,9 @@ function updateCurrentBNPredictionsDisplay() {
       if (params.initialPrey > 0 && stats.deathFrames.prey !== null && stats.deathFrames.prey < MIN_DURATION_FOR_SCORING * QUICK_EXTINCTION_THRESHOLD_FACTOR) score -= QUICK_EXTINCTION_PENALTY * 1.75; // Prey are crucial
       if (params.initialPredators > 0 && stats.deathFrames.predator !== null && stats.deathFrames.predator < MIN_DURATION_FOR_SCORING * QUICK_EXTINCTION_THRESHOLD_FACTOR) score -= QUICK_EXTINCTION_PENALTY;
 
+      const PLANT_EXTINCTION_PENALTY = 1200; // Additional penalty if plants die out
+      if (params.initialPlants > 0 && stats.finalPlantCount === 0) score -= PLANT_EXTINCTION_PENALTY;
+
       // Bonus for multiple populations surviving till the end of the run
       const ALL_ALIVE_BONUS = 1500;
       const TWO_ALIVE_BONUS = 700;
