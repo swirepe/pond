@@ -2702,6 +2702,7 @@ function updateCurrentBNPredictionsDisplay() {
         DOM_ELEMENTS.controlsOverlay.classList.remove('visible');
         DOM_ELEMENTS.statsToggle.style.display = 'none';
         DOM_ELEMENTS.controlsToggle.style.display = 'none';
+        DOM_ELEMENTS.pastRunsToggleMain.style.display = 'none';
         populatePastRunsSummaryList();
         DOM_ELEMENTS.pastRunDetails.style.display = 'none'; // Hide details initially
       });
@@ -2720,6 +2721,7 @@ function updateCurrentBNPredictionsDisplay() {
         // Show overlay toggles again when returning to simulation
         DOM_ELEMENTS.statsToggle.style.display = 'block';
         DOM_ELEMENTS.controlsToggle.style.display = 'block';
+        DOM_ELEMENTS.pastRunsToggleMain.style.display = 'block';
       });
       DOM_ELEMENTS.currentRunInfo.classList.add('visible'); // Show current run info by default
 
