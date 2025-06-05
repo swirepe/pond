@@ -2773,16 +2773,7 @@ function updateCurrentBNPredictionsDisplay() {
           animationFrameId = requestAnimationFrame(gameLoop);
         }
         DOM_ELEMENTS.currentRunInfo.classList.add('visible');
-        DOM_ELEMENTS.runComparisonContainer.style.display = 'none';
-        DOM_ELEMENTS.compareRunsButton.style.display = 'none';
-        DOM_ELEMENTS.pastRunDetailsModal.style.display = 'none';
-        DOM_ELEMENTS.pastRunDetails.style.display = 'none';
-        selectedRunIndicesForCompare = [];
-        const boxes = DOM_ELEMENTS.pastRunsSummaryList.querySelectorAll('.compare-checkbox');
-        boxes.forEach(b => {
-          b.checked = false;
-          b.closest('.past-run-summary-item')?.classList.remove('compare-selected');
-        });
+        closePastRunModal();
       });
       DOM_ELEMENTS.currentRunInfo.classList.add('visible'); // Show current run info by default
 
@@ -2790,39 +2781,22 @@ function updateCurrentBNPredictionsDisplay() {
       DOM_ELEMENTS.exportRunsButton.addEventListener('click', exportRunsData);
       DOM_ELEMENTS.importRunsFile.addEventListener('change', importRunsData);
 
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && DOM_ELEMENTS.pastRunDetailsModal.style.display !== 'none') {
+          closePastRunModal();
+        }
+      });
+
       DOM_ELEMENTS.compareRunsButton.addEventListener('click', () => {
         if (selectedRunIndicesForCompare.length === 2) {
           displayRunComparison(selectedRunIndicesForCompare[0], selectedRunIndicesForCompare[1]);
         }
       });
-      DOM_ELEMENTS.closeComparisonButton.addEventListener('click', () => {
-        DOM_ELEMENTS.runComparisonContainer.style.display = 'none';
-        DOM_ELEMENTS.compareRunsButton.style.display = 'none';
-        DOM_ELEMENTS.pastRunDetailsModal.style.display = 'none';
-        DOM_ELEMENTS.pastRunDetails.style.display = 'none';
-        selectedRunIndicesForCompare = [];
-        const boxes = DOM_ELEMENTS.pastRunsSummaryList.querySelectorAll('.compare-checkbox');
-        boxes.forEach(b => {
-          b.checked = false;
-          b.closest('.past-run-summary-item')?.classList.remove('compare-selected');
-        });
-      });
+      DOM_ELEMENTS.closeComparisonButton.addEventListener('click', closePastRunModal);
 
-      DOM_ELEMENTS.closePastRunDetailsButton.addEventListener('click', () => {
-        DOM_ELEMENTS.pastRunDetailsModal.style.display = 'none';
-        DOM_ELEMENTS.pastRunDetails.style.display = 'none';
-        DOM_ELEMENTS.runComparisonContainer.style.display = 'none';
-        const selected = DOM_ELEMENTS.pastRunsSummaryList.querySelector('.past-run-summary-item.active-selection');
-        if (selected) selected.classList.remove('active-selection');
-      });
+      DOM_ELEMENTS.closePastRunDetailsButton.addEventListener('click', closePastRunModal);
       DOM_ELEMENTS.pastRunDetailsModal.addEventListener('click', (e) => {
-        if (e.target === DOM_ELEMENTS.pastRunDetailsModal) {
-          DOM_ELEMENTS.pastRunDetailsModal.style.display = 'none';
-          DOM_ELEMENTS.pastRunDetails.style.display = 'none';
-          DOM_ELEMENTS.runComparisonContainer.style.display = 'none';
-          const selected = DOM_ELEMENTS.pastRunsSummaryList.querySelector('.past-run-summary-item.active-selection');
-          if (selected) selected.classList.remove('active-selection');
-        }
+        if (e.target === DOM_ELEMENTS.pastRunDetailsModal) closePastRunModal();
       });
     }
 
@@ -3398,7 +3372,7 @@ function displayPastRunDetails(runIndex) {
     const runData = completedRuns[runIndex];
     if (!runData) return;
     DOM_ELEMENTS.runComparisonContainer.style.display = 'none';
-    DOM_ELEMENTS.pastRunDetailsModal.style.display = 'flex';
+    openPastRunModal();
     DOM_ELEMENTS.pastRunDetails.style.display = 'block';
     DOM_ELEMENTS.pastRunNumberDisplay.textContent = runData.runNumber;
     DOM_ELEMENTS.pastRunScoreDisplay.textContent = calculateRunScore(runData).toFixed(0);
@@ -3562,7 +3536,7 @@ function displayRunComparison(idxA, idxB) {
     if (!runA || !runB) return;
     DOM_ELEMENTS.pastRunDetails.style.display = 'none';
     DOM_ELEMENTS.runComparisonContainer.style.display = 'block';
-    DOM_ELEMENTS.pastRunDetailsModal.style.display = 'flex';
+    openPastRunModal();
     const metrics = [
         ['AP Score', calculateAutoPilotScore(runA).toFixed(0), calculateAutoPilotScore(runB).toFixed(0)],
         ['Survival Frames', calculateRunScore(runA).toFixed(0), calculateRunScore(runB).toFixed(0)],
@@ -3586,6 +3560,27 @@ function displayRunComparison(idxA, idxB) {
     metrics.forEach(row => { html += `<tr><td class="text-left font-medium">${row[0]}</td><td>${row[1]}</td><td>${row[2]}</td></tr>`; });
     html += '</tbody></table>';
     DOM_ELEMENTS.runComparisonStats.innerHTML = html;
+}
+
+function openPastRunModal() {
+    document.body.style.overflow = 'hidden';
+    DOM_ELEMENTS.pastRunDetailsModal.style.display = 'flex';
+}
+
+function closePastRunModal() {
+    DOM_ELEMENTS.pastRunDetailsModal.style.display = 'none';
+    DOM_ELEMENTS.pastRunDetails.style.display = 'none';
+    DOM_ELEMENTS.runComparisonContainer.style.display = 'none';
+    DOM_ELEMENTS.compareRunsButton.style.display = 'none';
+    document.body.style.overflow = 'auto';
+    selectedRunIndicesForCompare = [];
+    const boxes = DOM_ELEMENTS.pastRunsSummaryList.querySelectorAll('.compare-checkbox');
+    boxes.forEach(b => {
+        b.checked = false;
+        b.closest('.past-run-summary-item')?.classList.remove('compare-selected');
+    });
+    const selected = DOM_ELEMENTS.pastRunsSummaryList.querySelector('.past-run-summary-item.active-selection');
+    if (selected) selected.classList.remove('active-selection');
 }
 
     function resetSimulation() {
