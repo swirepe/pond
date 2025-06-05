@@ -340,7 +340,8 @@
     }
 
     #pastPopulationGraphCanvas,
-    #pastCumulativeGraphCanvas {
+    #pastCumulativeGraphCanvas,
+    #pastBNPredictionGraphCanvas {
       width: 100%;
       max-width: 600px;
       height: 200px;
@@ -583,6 +584,18 @@
         <div id="currentCumulativeGraphLegend" class="graph-legend"></div>
       </div>
       <div class="stat-subsection">
+        <h3>BN Predictions At Run Start (UI Params Only)</h3>
+        <div class="text-sm">P(Prey Extinct): <span id="bnRunStartPreyExtinctionPrediction">--</span></div>
+        <div class="text-sm">P(Predator Extinct): <span id="bnRunStartPredatorExtinctionPrediction">--</span></div>
+        <div class="text-sm">P(Plant Growth > Consumpt.): <span id="bnRunStartPlantGrowthPrediction">--</span></div>
+        <div class="text-sm">P(Prey Growth > Death): <span id="bnRunStartPreyGrowthPrediction">--</span></div>
+        <div class="text-sm">P(Predator Growth > Death): <span id="bnRunStartPredatorGrowthPrediction">--</span></div>
+        <div class="text-sm mt-1 pt-1 border-t border-[var(--ui-border-color)] border-opacity-30">P(Prey Starv. Risk):
+          <span id="bnRunStartPreyStarvationRiskPrediction">--</span>
+        </div>
+        <div class="text-sm">P(Pred Starv. Risk): <span id="bnRunStartPredStarvationRiskPrediction">--</span></div>
+      </div>
+      <div class="stat-subsection">
         <h3>BN Predictions (UI Params & Live Pop.)</h3>
         <div class="text-sm">P(Prey Extinct): <span id="bnCurrentPreyExtinctionPrediction">--</span></div>
         <div class="text-sm">P(Predator Extinct): <span id="bnCurrentPredatorExtinctionPrediction">--</span></div>
@@ -755,6 +768,11 @@
         <canvas id="pastCumulativeGraphCanvas"></canvas>
         <div id="pastCumulativeGraphLegend" class="graph-legend"></div>
       </div>
+      <div class="stat-subsection mt-6">
+        <h4 class="text-lg font-medium mb-2 text-center">BN Prediction Trends</h4>
+        <canvas id="pastBNPredictionGraphCanvas"></canvas>
+        <div id="pastBNPredictionGraphLegend" class="graph-legend"></div>
+      </div>
     </div>
 
     <div id="bayesianNetworkVisualizationContainer" class="mt-8" style="display:none;">
@@ -816,6 +834,7 @@
     let pastPopulationGraphCanvas, pastPopulationGraphCtx, pastCumulativeGraphCanvas, pastCumulativeGraphCtx;
     let bnVisualizationCanvas, bnVisualizationCtx;
     let bnPredictionGraphCanvas, bnPredictionGraphCtx;
+    let pastBNPredictionGraphCanvas, pastBNPredictionGraphCtx;
     let simulationViewContainer, pastRunsViewContainer, bnVisualizationContainer;
 
     let currentRunNumber = 1;
@@ -2647,6 +2666,7 @@ function updateCurrentBNPredictionsDisplay() {
           }
           drawPopulationGraph();
           drawCumulativeGraph();
+          updateRunStartBNPredictionsDisplay();
           updateCurrentBNPredictionsDisplay();
         }
       });
@@ -2757,6 +2777,7 @@ function updateCurrentBNPredictionsDisplay() {
       simulationTimeAccumulator = 0; // Reset for fixed step loop
 
       resetSimulation(); // Resets entities, populations, and history arrays
+      updateRunStartBNPredictionsDisplay(); // Show BN predictions for this run
       updateCurrentBNPredictionsDisplay(); // Update BN display for the *new* current parameters
 
       DOM_ELEMENTS.currentRunInfo.classList.add('visible');
@@ -3128,6 +3149,7 @@ function updateCurrentBNPredictionsDisplay() {
         },
         populationGraphHistory: JSON.parse(JSON.stringify(populationHistory)),
         cumulativeGraphHistory: JSON.parse(JSON.stringify(cumulativeHistory)),
+        bnPredictionGraphHistory: JSON.parse(JSON.stringify(bnPredictionHistory)),
       };
       completedRuns.push(runData);
 
@@ -3160,6 +3182,20 @@ function updateCurrentBNPredictionsDisplay() {
     }, ];
     drawSimplifiedGenericGraph(summaryGraphCtx, canvasEl, popHistories, runData.populationGraphHistory.maxLength);
 }
+
+    function updateRunStartBNPredictionsDisplay() {
+      if (!bnPredictionsForNextRun) return;
+      const ext = bnPredictionsForNextRun.extinction;
+      const grow = bnPredictionsForNextRun.growth;
+      const starv = bnPredictionsForNextRun.starvationRisk;
+      DOM_ELEMENTS.bnRunStartPreyExtinctionPrediction.textContent = ext && !ext.error ? ext.prey.toFixed(3) : 'N/A';
+      DOM_ELEMENTS.bnRunStartPredatorExtinctionPrediction.textContent = ext && !ext.error ? ext.predator.toFixed(3) : 'N/A';
+      DOM_ELEMENTS.bnRunStartPlantGrowthPrediction.textContent = grow && !grow.error ? grow.plant.toFixed(3) : 'N/A';
+      DOM_ELEMENTS.bnRunStartPreyGrowthPrediction.textContent = grow && !grow.error ? grow.prey.toFixed(3) : 'N/A';
+      DOM_ELEMENTS.bnRunStartPredatorGrowthPrediction.textContent = grow && !grow.error ? grow.predator.toFixed(3) : 'N/A';
+      DOM_ELEMENTS.bnRunStartPreyStarvationRiskPrediction.textContent = starv && !starv.error ? starv.prey.toFixed(3) : 'N/A';
+      DOM_ELEMENTS.bnRunStartPredStarvationRiskPrediction.textContent = starv && !starv.error ? starv.predator.toFixed(3) : 'N/A';
+    }
 
 function populatePastRunsSummaryList() {
     const summaryListDiv = DOM_ELEMENTS.pastRunsSummaryList;
@@ -3287,8 +3323,8 @@ function displayPastRunDetails(runIndex) {
     
     DOM_ELEMENTS.pastRunStatsDisplay.innerHTML = statsHtml;
     setTimeout(() => {
-        if (!pastPopulationGraphCanvas || !pastCumulativeGraphCanvas) return;
-        [pastPopulationGraphCanvas, pastCumulativeGraphCanvas].forEach(c => {
+        if (!pastPopulationGraphCanvas || !pastCumulativeGraphCanvas || !pastBNPredictionGraphCanvas) return;
+        [pastPopulationGraphCanvas, pastCumulativeGraphCanvas, pastBNPredictionGraphCanvas].forEach(c => {
             c.width = c.clientWidth;
             c.height = c.clientHeight || 200;
         });
@@ -3369,6 +3405,15 @@ function displayPastRunDetails(runIndex) {
         ];
         drawGenericGraph(pastCumulativeGraphCtx, pastCumulativeGraphCanvas, cumHistories, runData.cumulativeGraphHistory.maxLength);
         populateGraphLegend('pastCumulativeGraphLegend', cumHistories);
+
+        const bnHistories = [
+            { data: runData.bnPredictionGraphHistory.preyExtinctionProb || [], color: getComputedCssVar(CSS_VARS.PREY_COLOR), lineWidth: 1.5, label: "P(Prey Extinct)" },
+            { data: runData.bnPredictionGraphHistory.predatorExtinctionProb || [], color: getComputedCssVar(CSS_VARS.PREDATOR_COLOR), lineWidth: 1.5, label: "P(Pred Extinct)" },
+            { data: runData.bnPredictionGraphHistory.favorableGrowthPreyProb || [], color: modifyHslColor(getComputedCssVar(CSS_VARS.PREY_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Prey Growth)" },
+            { data: runData.bnPredictionGraphHistory.favorableGrowthPredatorProb || [], color: modifyHslColor(getComputedCssVar(CSS_VARS.PREDATOR_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Pred Growth)" }
+        ];
+        drawGenericGraph(pastBNPredictionGraphCtx, pastBNPredictionGraphCanvas, bnHistories, runData.bnPredictionGraphHistory.maxLength, 1.05, true);
+        populateGraphLegend('pastBNPredictionGraphLegend', bnHistories);
     }, 50);
 }
 
@@ -3740,36 +3785,37 @@ function displayPastRunDetails(runIndex) {
         bnUpdateCounter++;
         if (bnUpdateCounter >= bnUpdateInterval) {
             bnUpdateCounter = 0;
+
+            const paramsForLiveGraph = JSON.parse(JSON.stringify(config)); // Start with UI params
+            paramsForLiveGraph.initialPlants = Math.max(0, plants.length); // Use live counts
+            paramsForLiveGraph.initialPrey = Math.max(0, prey.length);
+            paramsForLiveGraph.initialPredators = Math.max(0, predators.length);
+
+            const extPredsHist = predictExtinctionProbabilities(paramsForLiveGraph);
+            const growthPredsHist = predictFavorableGrowth(paramsForLiveGraph);
+
+            if (!extPredsHist.error) {
+                bnPredictionHistory.preyExtinctionProb.push(extPredsHist.prey);
+                bnPredictionHistory.predatorExtinctionProb.push(extPredsHist.predator);
+            } else {
+                bnPredictionHistory.preyExtinctionProb.push(0.5);
+                bnPredictionHistory.predatorExtinctionProb.push(0.5);
+            }
+            if (!growthPredsHist.error) {
+                bnPredictionHistory.favorableGrowthPreyProb.push(growthPredsHist.prey);
+                bnPredictionHistory.favorableGrowthPredatorProb.push(growthPredsHist.predator);
+            } else {
+                bnPredictionHistory.favorableGrowthPreyProb.push(0.5);
+                bnPredictionHistory.favorableGrowthPredatorProb.push(0.5);
+            }
+
+            Object.values(bnPredictionHistory).forEach(arr => {
+                if (Array.isArray(arr) && arr.length > bnPredictionHistory.maxLength) arr.shift();
+            });
+
             if (DOM_ELEMENTS.statsOverlay.classList.contains('visible')) {
-                updateCurrentBNPredictionsDisplay(); // Updates text using live pops + UI settings
-
-                // For history graph: use UI params for non-population, live counts for population
-                const paramsForLiveGraph = JSON.parse(JSON.stringify(config)); // Start with UI params
-                paramsForLiveGraph.initialPlants = Math.max(0, plants.length); // Use live counts
-                paramsForLiveGraph.initialPrey = Math.max(0, prey.length);
-                paramsForLiveGraph.initialPredators = Math.max(0, predators.length);
-
-                const extPredsHist = predictExtinctionProbabilities(paramsForLiveGraph);
-                const growthPredsHist = predictFavorableGrowth(paramsForLiveGraph);
-
-                if (!extPredsHist.error) {
-                    bnPredictionHistory.preyExtinctionProb.push(extPredsHist.prey);
-                    bnPredictionHistory.predatorExtinctionProb.push(extPredsHist.predator);
-                } else { 
-                    bnPredictionHistory.preyExtinctionProb.push(0.5); 
-                    bnPredictionHistory.predatorExtinctionProb.push(0.5);
-                }
-                if (!growthPredsHist.error) {
-                    bnPredictionHistory.favorableGrowthPreyProb.push(growthPredsHist.prey);
-                    bnPredictionHistory.favorableGrowthPredatorProb.push(growthPredsHist.predator);
-                } else {
-                    bnPredictionHistory.favorableGrowthPreyProb.push(0.5);
-                    bnPredictionHistory.favorableGrowthPredatorProb.push(0.5);
-                }
-                
-                Object.values(bnPredictionHistory).forEach(arr => {
-                    if (Array.isArray(arr) && arr.length > bnPredictionHistory.maxLength) arr.shift();
-                });
+                updateCurrentBNPredictionsDisplay();
+                drawBNPredictionGraph();
             }
         }
 
@@ -3948,7 +3994,13 @@ function displayPastRunDetails(runIndex) {
         'pastRunParamsDisplay', 'pastRunStatsDisplay',
         'pastPopulationGraphLegend', 'pastCumulativeGraphLegend', 'bnLegend',
         'currentPopulationGraphLegend', 'currentCumulativeGraphLegend',
-        'bnPredictionGraphCanvas', 'bnPredictionGraphLegend', // Add new elements
+        'bnRunStartPreyExtinctionPrediction', 'bnRunStartPredatorExtinctionPrediction',
+        'bnRunStartPlantGrowthPrediction', 'bnRunStartPreyGrowthPrediction',
+        'bnRunStartPredatorGrowthPrediction', 'bnRunStartPreyStarvationRiskPrediction',
+        'bnRunStartPredStarvationRiskPrediction',
+        'bnPredictionGraphCanvas', 'bnPredictionGraphLegend',
+        'pastBNPredictionGraphCanvas', 'pastBNPredictionGraphLegend',
+        // Add new elements
       ];
       tunableParams.forEach(param => { ids.push(param.id); ids.push(param.id + "Value"); });
       ids.forEach(id => DOM_ELEMENTS[id] = document.getElementById(id));
@@ -3963,6 +4015,8 @@ function displayPastRunDetails(runIndex) {
 
       bnPredictionGraphCanvas = DOM_ELEMENTS.bnPredictionGraphCanvas; // Cache new canvas
       if (bnPredictionGraphCanvas) bnPredictionGraphCtx = bnPredictionGraphCanvas.getContext('2d'); // Get context
+      pastBNPredictionGraphCanvas = DOM_ELEMENTS.pastBNPredictionGraphCanvas;
+      if (pastBNPredictionGraphCanvas) pastBNPredictionGraphCtx = pastBNPredictionGraphCanvas.getContext('2d');
       // Main view containers
       simulationViewContainer = DOM_ELEMENTS.simulationViewContainer;
       pastRunsViewContainer = DOM_ELEMENTS.pastRunsViewContainer;
@@ -4006,6 +4060,7 @@ function displayPastRunDetails(runIndex) {
         bnStarvPreds = predictStarvationRiskProbabilities(currentEffectiveConfig);
       }
       bnPredictionsForNextRun = { extinction: bnExtPreds, growth: bnGrowthPreds, starvationRisk: bnStarvPreds };
+      updateRunStartBNPredictionsDisplay();
       updateCurrentBNPredictionsDisplay(); // Show these predictions
 
       // Start the first run with the initial (potentially URL-modified) config
@@ -4035,11 +4090,13 @@ function displayPastRunDetails(runIndex) {
             if (runIdx >= 0 && runIdx < completedRuns.length) {
               setTimeout(() => displayPastRunDetails(runIdx), 50); // Redraw with a slight delay
             }
-          } else if (pastPopulationGraphCanvas && pastCumulativeGraphCanvas) { // Fallback if no item selected but canvases exist
+          } else if (pastPopulationGraphCanvas && pastCumulativeGraphCanvas && pastBNPredictionGraphCanvas) { // Fallback if no item selected but canvases exist
             if (pastPopulationGraphCanvas.clientWidth > 0) pastPopulationGraphCanvas.width = pastPopulationGraphCanvas.clientWidth;
             if (pastPopulationGraphCanvas.clientHeight > 0) pastPopulationGraphCanvas.height = pastPopulationGraphCanvas.clientHeight || 200;
             if (pastCumulativeGraphCanvas.clientWidth > 0) pastCumulativeGraphCanvas.width = pastCumulativeGraphCanvas.clientWidth;
             if (pastCumulativeGraphCanvas.clientHeight > 0) pastCumulativeGraphCanvas.height = pastCumulativeGraphCanvas.clientHeight || 200;
+            if (pastBNPredictionGraphCanvas.clientWidth > 0) pastBNPredictionGraphCanvas.width = pastBNPredictionGraphCanvas.clientWidth;
+            if (pastBNPredictionGraphCanvas.clientHeight > 0) pastBNPredictionGraphCanvas.height = pastBNPredictionGraphCanvas.clientHeight || 200;
           }
         }
         // Resize and redraw BN visualization if visible
