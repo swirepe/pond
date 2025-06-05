@@ -921,10 +921,9 @@
     let bnPreyStarvationRiskCPTCounters = {}, bnPredatorStarvationRiskCPTCounters = {};
 
 
-    const BN_PARAM_BINS = 3; // Number of bins for discretizing continuous parameters for CPT keys
+    const BN_DEFAULT_BIN_COUNT = 3; // Default number of bins for discretizing continuous parameters
     const BN_LAPLACE_SMOOTHING = 1; // Laplace smoothing value for CPTs
     const BN_AUTOPILOT_PREDICTION_THRESHOLD = 0.80; // For BN scoring, how confident for "favorable growth"
-    const BN_MIN_RUNS_FOR_PREDICTION = BN_PARAM_BINS * 15; // Heuristic: Need enough data per bin combination
 
     const AUTOPILOT_CANDIDATE_POOL_SIZE = 1000;
     const AUTOPILOT_PROPORTION_PERTURB = 0.5;
@@ -1401,71 +1400,77 @@
 
     // --- BN Helper Functions ---
     function discretizeContinuousValue(value, min, max, numBins) { if (value <= min) return 0; if (value >= max) return numBins - 1; const binWidth = (max - min) / numBins; if (binWidth === 0) return 0; const binIndex = Math.floor((value - min) / binWidth); return Math.min(binIndex, numBins - 1); }
-    function getParamKeyForCPT(paramValues, parentParamConfigs) { let keyParts = []; for (const pConf of parentParamConfigs) { const val = paramValues[pConf.configKey]; if (val === undefined) { /*console.warn(`Undefined value for ${pConf.configKey} in getParamKeyForCPT`);*/ keyParts.push('NaN'); continue; } const binIndex = discretizeContinuousValue(val, pConf.min, pConf.max, BN_PARAM_BINS); keyParts.push(`b${binIndex}`); } return keyParts.join(','); }
+    function getParamKeyForCPT(paramValues, parentParamConfigs) { let keyParts = []; for (const pConf of parentParamConfigs) { const val = paramValues[pConf.configKey]; if (val === undefined) { /*console.warn(`Undefined value for ${pConf.configKey} in getParamKeyForCPT`);*/ keyParts.push('NaN'); continue; } const binIndex = discretizeContinuousValue(val, pConf.min, pConf.max, pConf.binCount || BN_DEFAULT_BIN_COUNT); keyParts.push(`b${binIndex}`); } return keyParts.join(','); }
 
     const bnParamNodesConfigBase = [ // Base parameters directly from config/sliders
-      { name: 'initialPlants', configKey: 'initialPlants', type: 'continuous', isTunable: true },
-      { name: 'initialPrey', configKey: 'initialPrey', type: 'continuous', isTunable: true },
-      { name: 'initialPredators', configKey: 'initialPredators', type: 'continuous', isTunable: true },
-      { name: 'plantReproduceRate', configKey: 'plantReproduceRate', type: 'continuous', isTunable: true },
-      { name: 'preyReproductionCooldown', configKey: 'preyReproductionCooldown', type: 'continuous', isTunable: true },
-      { name: 'predatorReproductionCooldown', configKey: 'predatorReproductionCooldown', type: 'continuous', isTunable: true },
-      { name: 'preyMaxHealth', configKey: 'preyMaxHealth', type: 'continuous', isTunable: true },
-      { name: 'preyHealthToReproduce', configKey: 'preyHealthToReproduce', type: 'continuous', isTunable: true },
-      { name: 'predatorMaxHealth', configKey: 'predatorMaxHealth', type: 'continuous', isTunable: true },
-      { name: 'predatorHealthToReproduce', configKey: 'predatorHealthToReproduce', type: 'continuous', isTunable: true },
-      { name: 'preyMaxSpeed', configKey: 'preyMaxSpeed', type: 'continuous', isTunable: true },
-      { name: 'preyAgility', configKey: 'preyAgility', type: 'continuous', isTunable: true },
+      { name: 'initialPlants', configKey: 'initialPlants', type: 'continuous', isTunable: true, binCount: BN_DEFAULT_BIN_COUNT },
+      { name: 'initialPrey', configKey: 'initialPrey', type: 'continuous', isTunable: true, binCount: BN_DEFAULT_BIN_COUNT },
+      { name: 'initialPredators', configKey: 'initialPredators', type: 'continuous', isTunable: true, binCount: BN_DEFAULT_BIN_COUNT },
+      { name: 'plantReproduceRate', configKey: 'plantReproduceRate', type: 'continuous', isTunable: true, binCount: BN_DEFAULT_BIN_COUNT },
+      { name: 'preyReproductionCooldown', configKey: 'preyReproductionCooldown', type: 'continuous', isTunable: true, binCount: BN_DEFAULT_BIN_COUNT },
+      { name: 'predatorReproductionCooldown', configKey: 'predatorReproductionCooldown', type: 'continuous', isTunable: true, binCount: BN_DEFAULT_BIN_COUNT },
+      { name: 'preyMaxHealth', configKey: 'preyMaxHealth', type: 'continuous', isTunable: true, binCount: BN_DEFAULT_BIN_COUNT },
+      { name: 'preyHealthToReproduce', configKey: 'preyHealthToReproduce', type: 'continuous', isTunable: true, binCount: BN_DEFAULT_BIN_COUNT },
+      { name: 'predatorMaxHealth', configKey: 'predatorMaxHealth', type: 'continuous', isTunable: true, binCount: BN_DEFAULT_BIN_COUNT },
+      { name: 'predatorHealthToReproduce', configKey: 'predatorHealthToReproduce', type: 'continuous', isTunable: true, binCount: BN_DEFAULT_BIN_COUNT },
+      { name: 'preyMaxSpeed', configKey: 'preyMaxSpeed', type: 'continuous', isTunable: true, binCount: BN_DEFAULT_BIN_COUNT },
+      { name: 'preyAgility', configKey: 'preyAgility', type: 'continuous', isTunable: true, binCount: BN_DEFAULT_BIN_COUNT },
       // preyInertiaEffectStrength, preyTurnSpeedPenaltyFactor (omitted as less critical for high-level BN outcomes, could be added)
-      { name: 'predatorMaxSpeed', configKey: 'predatorMaxSpeed', type: 'continuous', isTunable: true },
-      { name: 'predatorAgility', configKey: 'predatorAgility', type: 'continuous', isTunable: true },
+      { name: 'predatorMaxSpeed', configKey: 'predatorMaxSpeed', type: 'continuous', isTunable: true, binCount: BN_DEFAULT_BIN_COUNT },
+      { name: 'predatorAgility', configKey: 'predatorAgility', type: 'continuous', isTunable: true, binCount: BN_DEFAULT_BIN_COUNT },
       // predatorInertiaEffectStrength, predatorTurnSpeedPenaltyFactor (omitted)
-      { name: 'preyHungerRate', configKey: 'preyHungerRate', type: 'continuous', isTunable: true },
-      { name: 'predatorHungerRate', configKey: 'predatorHungerRate', type: 'continuous', isTunable: true },
+      { name: 'preyHungerRate', configKey: 'preyHungerRate', type: 'continuous', isTunable: true, binCount: BN_DEFAULT_BIN_COUNT },
+      { name: 'predatorHungerRate', configKey: 'predatorHungerRate', type: 'continuous', isTunable: true, binCount: BN_DEFAULT_BIN_COUNT },
       // planktonMode, preyKillPredatorsMode are boolean, handled slightly differently if needed as parents, or implicitly via their effect on outcomes
     ];
 
     const bnDerivedParamNodesConfig = [ // Derived features, calculated from base params
       {
-        name: BN_NODE_NAMES.DERIVED_PREY_TO_PRED_RATIO, configKey: BN_NODE_NAMES.DERIVED_PREY_TO_PRED_RATIO, type: 'continuous', min: 0, max: 50, default: 5, isTunable: false, parentConfigKeys: ['initialPrey', 'initialPredators'],
+        name: BN_NODE_NAMES.DERIVED_PREY_TO_PRED_RATIO, configKey: BN_NODE_NAMES.DERIVED_PREY_TO_PRED_RATIO, type: 'continuous', min: 0, max: 50, default: 5, isTunable: false, binCount: BN_DEFAULT_BIN_COUNT, parentConfigKeys: ['initialPrey', 'initialPredators'],
         calculate: (p, globalConf) => (p.initialPredators > 0 ? p.initialPrey / p.initialPredators : p.initialPrey * 2)
       }, // High ratio if no preds
       {
-        name: BN_NODE_NAMES.DERIVED_PLANT_TO_PREY_RATIO, configKey: BN_NODE_NAMES.DERIVED_PLANT_TO_PREY_RATIO, type: 'continuous', min: 0, max: 50, default: 5, isTunable: false, parentConfigKeys: ['initialPlants', 'initialPrey'],
+        name: BN_NODE_NAMES.DERIVED_PLANT_TO_PREY_RATIO, configKey: BN_NODE_NAMES.DERIVED_PLANT_TO_PREY_RATIO, type: 'continuous', min: 0, max: 50, default: 5, isTunable: false, binCount: BN_DEFAULT_BIN_COUNT, parentConfigKeys: ['initialPlants', 'initialPrey'],
         calculate: (p, globalConf) => (p.initialPrey > 0 ? p.initialPlants / p.initialPrey : p.initialPlants * 2)
       }, // High ratio if no prey
       {
-        name: BN_NODE_NAMES.DERIVED_PREY_REPRO_HEALTH_RATIO, configKey: BN_NODE_NAMES.DERIVED_PREY_REPRO_HEALTH_RATIO, type: 'continuous', min: 0.25, max: 1.0, default: 0.75, isTunable: false, parentConfigKeys: ['preyHealthToReproduce', 'preyMaxHealth'],
+        name: BN_NODE_NAMES.DERIVED_PREY_REPRO_HEALTH_RATIO, configKey: BN_NODE_NAMES.DERIVED_PREY_REPRO_HEALTH_RATIO, type: 'continuous', min: 0.25, max: 1.0, default: 0.75, isTunable: false, binCount: BN_DEFAULT_BIN_COUNT, parentConfigKeys: ['preyHealthToReproduce', 'preyMaxHealth'],
         calculate: (p, globalConf) => (p.preyMaxHealth > 0 ? Math.max(0.25, Math.min(1.0, p.preyHealthToReproduce / p.preyMaxHealth)) : 0.75)
       },
       {
-        name: BN_NODE_NAMES.DERIVED_PRED_REPRO_HEALTH_RATIO, configKey: BN_NODE_NAMES.DERIVED_PRED_REPRO_HEALTH_RATIO, type: 'continuous', min: 0.25, max: 1.0, default: 0.75, isTunable: false, parentConfigKeys: ['predatorHealthToReproduce', 'predatorMaxHealth'],
+        name: BN_NODE_NAMES.DERIVED_PRED_REPRO_HEALTH_RATIO, configKey: BN_NODE_NAMES.DERIVED_PRED_REPRO_HEALTH_RATIO, type: 'continuous', min: 0.25, max: 1.0, default: 0.75, isTunable: false, binCount: BN_DEFAULT_BIN_COUNT, parentConfigKeys: ['predatorHealthToReproduce', 'predatorMaxHealth'],
         calculate: (p, globalConf) => (p.predatorMaxHealth > 0 ? Math.max(0.25, Math.min(1.0, p.predatorHealthToReproduce / p.predatorMaxHealth)) : 0.75)
       },
       {
-        name: BN_NODE_NAMES.DERIVED_RELATIVE_PREY_SPEED, configKey: BN_NODE_NAMES.DERIVED_RELATIVE_PREY_SPEED, type: 'continuous', min: 0.2, max: 3.0, default: 1.0, isTunable: false, parentConfigKeys: ['preyMaxSpeed', 'predatorMaxSpeed'],
+        name: BN_NODE_NAMES.DERIVED_RELATIVE_PREY_SPEED, configKey: BN_NODE_NAMES.DERIVED_RELATIVE_PREY_SPEED, type: 'continuous', min: 0.2, max: 3.0, default: 1.0, isTunable: false, binCount: BN_DEFAULT_BIN_COUNT, parentConfigKeys: ['preyMaxSpeed', 'predatorMaxSpeed'],
         calculate: (p, globalConf) => (p.predatorMaxSpeed > 0 ? p.preyMaxSpeed / p.predatorMaxSpeed : p.preyMaxSpeed)
       },
 
       // More advanced derived features
       {
-        name: BN_NODE_NAMES.DERIVED_PREY_ENERGY_BUDGET, configKey: BN_NODE_NAMES.DERIVED_PREY_ENERGY_BUDGET, type: 'continuous', min: 0, max: 5000, default: 500, isTunable: false, parentConfigKeys: ['preyHealthGainFromPlant', 'preyHungerRate', 'plantReproduceRate', 'initialPrey', 'initialPlants'],
+        name: BN_NODE_NAMES.DERIVED_PREY_ENERGY_BUDGET, configKey: BN_NODE_NAMES.DERIVED_PREY_ENERGY_BUDGET, type: 'continuous', min: 0, max: 5000, default: 500, isTunable: false, binCount: BN_DEFAULT_BIN_COUNT, parentConfigKeys: ['preyHealthGainFromPlant', 'preyHungerRate', 'plantReproduceRate', 'initialPrey', 'initialPlants'],
         calculate: (p, globalConf) => (globalConf.preyHealthGainFromPlant / Math.max(0.1, p.preyHungerRate)) * (p.plantReproduceRate / Math.max(0.01, p.initialPrey / Math.max(1, p.initialPlants)))
       }, // Health gain per hunger * plant growth per prey
       {
-        name: BN_NODE_NAMES.DERIVED_PREDATOR_CHASE_SUCCESS, configKey: BN_NODE_NAMES.DERIVED_PREDATOR_CHASE_SUCCESS, type: 'continuous', min: 0.05, max: 20, default: 1, isTunable: false, parentConfigKeys: ['predatorMaxSpeed', 'preyMaxSpeed', 'predatorAgility', 'preyAgility'],
+        name: BN_NODE_NAMES.DERIVED_PREDATOR_CHASE_SUCCESS, configKey: BN_NODE_NAMES.DERIVED_PREDATOR_CHASE_SUCCESS, type: 'continuous', min: 0.05, max: 20, default: 1, isTunable: false, binCount: BN_DEFAULT_BIN_COUNT, parentConfigKeys: ['predatorMaxSpeed', 'preyMaxSpeed', 'predatorAgility', 'preyAgility'],
         calculate: (p, globalConf) => (p.predatorMaxSpeed * p.predatorAgility) / Math.max(0.01, p.preyMaxSpeed * p.preyAgility)
       }, // Relative maneuverability and speed
       {
-        name: BN_NODE_NAMES.DERIVED_PREY_REPRODUCTIVE_POTENTIAL, configKey: BN_NODE_NAMES.DERIVED_PREY_REPRODUCTIVE_POTENTIAL, type: 'continuous', min: -20, max: 200, default: 10, isTunable: false, parentConfigKeys: ['preyMaxHealth', 'preyReproductionCooldown', 'preyHungerRate'],
+        name: BN_NODE_NAMES.DERIVED_PREY_REPRODUCTIVE_POTENTIAL, configKey: BN_NODE_NAMES.DERIVED_PREY_REPRODUCTIVE_POTENTIAL, type: 'continuous', min: -20, max: 200, default: 10, isTunable: false, binCount: BN_DEFAULT_BIN_COUNT, parentConfigKeys: ['preyMaxHealth', 'preyReproductionCooldown', 'preyHungerRate'],
         calculate: (p, globalConf) => (p.preyMaxHealth - globalConf.preyReproductionCost) / Math.max(1, p.preyReproductionCooldown * p.preyHungerRate)
       }, // Net health after repro / time to next repro considering hunger
       {
-        name: BN_NODE_NAMES.DERIVED_PREDATOR_REPRODUCTIVE_POTENTIAL, configKey: BN_NODE_NAMES.DERIVED_PREDATOR_REPRODUCTIVE_POTENTIAL, type: 'continuous', min: -20, max: 200, default: 10, isTunable: false, parentConfigKeys: ['predatorMaxHealth', 'predatorReproductionCooldown', 'predatorHungerRate'],
+        name: BN_NODE_NAMES.DERIVED_PREDATOR_REPRODUCTIVE_POTENTIAL, configKey: BN_NODE_NAMES.DERIVED_PREDATOR_REPRODUCTIVE_POTENTIAL, type: 'continuous', min: -20, max: 200, default: 10, isTunable: false, binCount: BN_DEFAULT_BIN_COUNT, parentConfigKeys: ['predatorMaxHealth', 'predatorReproductionCooldown', 'predatorHungerRate'],
         calculate: (p, globalConf) => (p.predatorMaxHealth - globalConf.predatorReproductionCost) / Math.max(1, p.predatorReproductionCooldown * p.predatorHungerRate)
       },
     ];
     let allBnParamAndDerivedNodeConfigs = []; // Will be populated in initBN
+
+    function getBNMinRunsForPrediction() {
+      const allConfigs = [...bnParamNodesConfigBase, ...bnDerivedParamNodesConfig];
+      const maxBins = Math.max(...allConfigs.map(c => c.binCount || BN_DEFAULT_BIN_COUNT));
+      return maxBins * 15; // Heuristic: more bins require more runs
+    }
 
     // Calculates derived parameters given a set of base parameters and the global config context
     function calculateDerivedParams(baseParams, fullConfigContext = config) {
@@ -1484,7 +1489,7 @@
     }
 
 
-    function isBNReady() { return simBayesianNetwork && completedRuns.length >= BN_MIN_RUNS_FOR_PREDICTION; }
+    function isBNReady() { return simBayesianNetwork && completedRuns.length >= getBNMinRunsForPrediction(); }
 
     function initBN() {
       simBayesianNetwork = new BayesianNetwork();
@@ -1578,7 +1583,7 @@
 
     // Initializes CPT for a discrete outcome node with Laplace smoothing
     function initializeNodeCPT(node, parentParamConfigsForNode, cptCounters) {
-      const parentBinCounts = parentParamConfigsForNode.map(() => BN_PARAM_BINS);
+      const parentBinCounts = parentParamConfigsForNode.map(p => p.binCount || BN_DEFAULT_BIN_COUNT);
       const numParentCombinations = parentBinCounts.reduce((acc, val) => acc * val, 1);
 
       const currentParentBins = new Array(parentParamConfigsForNode.length).fill(0);
@@ -1605,7 +1610,7 @@
         let k_idx = 0;
         while (k_idx < parentParamConfigsForNode.length) {
           currentParentBins[k_idx]++;
-          if (currentParentBins[k_idx] < BN_PARAM_BINS) break; // No carry-over
+          if (currentParentBins[k_idx] < parentBinCounts[k_idx]) break; // No carry-over
           currentParentBins[k_idx] = 0; // Reset and carry-over
           k_idx++;
         }
