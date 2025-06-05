@@ -2697,6 +2697,11 @@ function updateCurrentBNPredictionsDisplay() {
           }, 0);
         }
         document.body.style.overflow = 'auto'; // Allow scrolling in past runs view
+        // Hide overlays and their toggles when viewing past runs
+        DOM_ELEMENTS.statsOverlay.classList.remove('visible');
+        DOM_ELEMENTS.controlsOverlay.classList.remove('visible');
+        DOM_ELEMENTS.statsToggle.style.display = 'none';
+        DOM_ELEMENTS.controlsToggle.style.display = 'none';
         populatePastRunsSummaryList();
         DOM_ELEMENTS.pastRunDetails.style.display = 'none'; // Hide details initially
       });
@@ -2712,6 +2717,9 @@ function updateCurrentBNPredictionsDisplay() {
           animationFrameId = requestAnimationFrame(gameLoop);
         }
         DOM_ELEMENTS.currentRunInfo.classList.add('visible');
+        // Show overlay toggles again when returning to simulation
+        DOM_ELEMENTS.statsToggle.style.display = 'block';
+        DOM_ELEMENTS.controlsToggle.style.display = 'block';
       });
       DOM_ELEMENTS.currentRunInfo.classList.add('visible'); // Show current run info by default
 
