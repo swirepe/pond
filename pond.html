@@ -407,6 +407,39 @@
       border-color: hsl(var(--base-hue), 20%, 50%);
     }
 
+    .compare-checkbox {
+      margin-right: 6px;
+    }
+
+    #runComparisonContainer {
+      margin-bottom: 1.5rem;
+    }
+
+    #pastRunsSummaryListContainer {
+      max-height: 60vh;
+      overflow-y: auto;
+    }
+
+    #pastRunDetailsModal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.6);
+      display: none;
+      justify-content: center;
+      align-items: flex-start;
+      overflow: auto;
+      padding: 40px 20px;
+      z-index: 20;
+    }
+
+    #pastRunDetails {
+      max-width: 800px;
+      width: 100%;
+    }
+
     #pastRunsSummaryList {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -744,7 +777,16 @@
       </div>
     </div>
 
-    <div id="pastRunDetails" style="display:none;">
+    <button id="compareRunsButton" class="p-2 rounded-md bg-[hsl(var(--base-hue),50%,50%)] hover:bg-[hsl(var(--base-hue),50%,60%)] text-white mb-4" style="display:none;">Compare Selected Runs</button>
+
+    <div id="runComparisonContainer" style="display:none;" class="mb-8">
+      <button id="closeComparisonButton" class="mb-4 p-1 rounded-md bg-[hsl(var(--base-hue),50%,50%)] text-white">Close Comparison</button>
+      <div id="runComparisonStats" class="text-sm"></div>
+    </div>
+
+    <div id="pastRunDetailsModal" style="display:none;">
+      <div id="pastRunDetails">
+        <button id="closePastRunDetailsButton" class="mb-4 p-1 rounded-md bg-[hsl(var(--base-hue),50%,50%)] text-white">Close</button>
       <h3 class="text-xl font-semibold mb-4 text-center">Run <span id="pastRunNumberDisplay"></span> Details
         (Score: <span id="pastRunScoreDisplay">-</span>, AP Score: <span id="pastRunAutoPilotScoreDisplay">-</span>)
       </h3>
@@ -772,6 +814,7 @@
         <h4 class="text-lg font-medium mb-2 text-center">BN Prediction Trends</h4>
         <canvas id="pastBNPredictionGraphCanvas"></canvas>
         <div id="pastBNPredictionGraphLegend" class="graph-legend"></div>
+      </div>
       </div>
     </div>
 
@@ -839,6 +882,7 @@
 
     let currentRunNumber = 1;
     let completedRuns = [];
+    let selectedRunIndicesForCompare = [];
     let currentRunFrameCounter = 0;
     let currentRunDeathFrames = { plant: null, prey: null, predator: null };
     let initialConfigSnapshot;
@@ -2690,7 +2734,8 @@ function updateCurrentBNPredictionsDisplay() {
         }
         document.body.style.overflow = 'auto'; // Allow scrolling in past runs view
         populatePastRunsSummaryList();
-        DOM_ELEMENTS.pastRunDetails.style.display = 'none'; // Hide details initially
+        DOM_ELEMENTS.pastRunDetailsModal.style.display = 'none'; // Hide details initially
+        DOM_ELEMENTS.pastRunDetails.style.display = 'none';
       });
       DOM_ELEMENTS.backToSimulationButton.addEventListener('click', () => {
         pastRunsViewContainer.style.display = 'none';
@@ -2704,12 +2749,41 @@ function updateCurrentBNPredictionsDisplay() {
           animationFrameId = requestAnimationFrame(gameLoop);
         }
         DOM_ELEMENTS.currentRunInfo.classList.add('visible');
+        DOM_ELEMENTS.runComparisonContainer.style.display = 'none';
+        DOM_ELEMENTS.compareRunsButton.style.display = 'none';
+        DOM_ELEMENTS.pastRunDetailsModal.style.display = 'none';
+        DOM_ELEMENTS.pastRunDetails.style.display = 'none';
+        selectedRunIndicesForCompare = [];
+        const boxes = DOM_ELEMENTS.pastRunsSummaryList.querySelectorAll('.compare-checkbox');
+        boxes.forEach(b => b.checked = false);
       });
       DOM_ELEMENTS.currentRunInfo.classList.add('visible'); // Show current run info by default
 
       // Data Management Buttons
       DOM_ELEMENTS.exportRunsButton.addEventListener('click', exportRunsData);
       DOM_ELEMENTS.importRunsFile.addEventListener('change', importRunsData);
+
+      DOM_ELEMENTS.compareRunsButton.addEventListener('click', () => {
+        if (selectedRunIndicesForCompare.length === 2) {
+          displayRunComparison(selectedRunIndicesForCompare[0], selectedRunIndicesForCompare[1]);
+        }
+      });
+      DOM_ELEMENTS.closeComparisonButton.addEventListener('click', () => {
+        DOM_ELEMENTS.runComparisonContainer.style.display = 'none';
+        DOM_ELEMENTS.compareRunsButton.style.display = 'none';
+        DOM_ELEMENTS.pastRunDetailsModal.style.display = 'none';
+        DOM_ELEMENTS.pastRunDetails.style.display = 'none';
+        selectedRunIndicesForCompare = [];
+        const boxes = DOM_ELEMENTS.pastRunsSummaryList.querySelectorAll('.compare-checkbox');
+        boxes.forEach(b => b.checked = false);
+      });
+
+      DOM_ELEMENTS.closePastRunDetailsButton.addEventListener('click', () => {
+        DOM_ELEMENTS.pastRunDetailsModal.style.display = 'none';
+        DOM_ELEMENTS.pastRunDetails.style.display = 'none';
+        const selected = DOM_ELEMENTS.pastRunsSummaryList.querySelector('.past-run-summary-item.active-selection');
+        if (selected) selected.classList.remove('active-selection');
+      });
     }
 
     function startNewRun(parametersToUse) {
@@ -3224,11 +3298,28 @@ function populatePastRunsSummaryList() {
         item.className = 'past-run-summary-item';
         const originalRunIndex = completedRuns.findIndex(r => r.runNumber === run.runNumber);
         item.dataset.runIndex = originalRunIndex;
-        item.innerHTML = ` <h4 class="font-semibold text-lg">Run ${run.runNumber} (AP Score: ${run.autoPilotScore.toFixed(0)})</h4> <p class="text-sm text-gray-300">Survival: ${run.survivalScore.toFixed(0)} frames</p> <p class="text-sm text-gray-400">Final Pop: P:${run.statistics.finalPlantCount}, Y:${run.statistics.finalPreyCount}, R:${run.statistics.finalPredatorCount}</p> <canvas class="past-run-summary-graph"></canvas>`;
+        item.innerHTML = ` <input type="checkbox" class="compare-checkbox" data-run-index="${originalRunIndex}"> <h4 class="font-semibold text-lg inline">Run ${run.runNumber} (AP Score: ${run.autoPilotScore.toFixed(0)})</h4> <p class="text-sm text-gray-300">Survival: ${run.survivalScore.toFixed(0)} frames</p> <p class="text-sm text-gray-400">Final Pop: P:${run.statistics.finalPlantCount}, Y:${run.statistics.finalPreyCount}, R:${run.statistics.finalPredatorCount}</p> <canvas class="past-run-summary-graph"></canvas>`;
         summaryListDiv.appendChild(item);
         const summaryGraphCanvas = item.querySelector('.past-run-summary-graph');
         drawSinglePastRunSummaryGraph(summaryGraphCanvas, run);
-        item.addEventListener('click', () => {
+        const checkbox = item.querySelector('.compare-checkbox');
+        checkbox.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const runIdx = parseInt(checkbox.dataset.runIndex);
+            if (checkbox.checked) {
+                selectedRunIndicesForCompare.push(runIdx);
+                if (selectedRunIndicesForCompare.length > 2) {
+                    const removed = selectedRunIndicesForCompare.shift();
+                    const cb = summaryListDiv.querySelector(`.compare-checkbox[data-run-index='${removed}']`);
+                    if (cb) cb.checked = false;
+                }
+            } else {
+                selectedRunIndicesForCompare = selectedRunIndicesForCompare.filter(i => i !== runIdx);
+            }
+            DOM_ELEMENTS.compareRunsButton.style.display = selectedRunIndicesForCompare.length === 2 ? 'block' : 'none';
+        });
+        item.addEventListener('click', (e) => {
+            if (e.target.classList.contains('compare-checkbox')) return;
             const currentlySelected = summaryListDiv.querySelector('.past-run-summary-item.active-selection');
             if (currentlySelected) currentlySelected.classList.remove('active-selection');
             item.classList.add('active-selection');
@@ -3260,6 +3351,8 @@ function populateGraphLegend(legendDivId, historiesWithLabels) {
 function displayPastRunDetails(runIndex) {
     const runData = completedRuns[runIndex];
     if (!runData) return;
+    DOM_ELEMENTS.runComparisonContainer.style.display = 'none';
+    DOM_ELEMENTS.pastRunDetailsModal.style.display = 'flex';
     DOM_ELEMENTS.pastRunDetails.style.display = 'block';
     DOM_ELEMENTS.pastRunNumberDisplay.textContent = runData.runNumber;
     DOM_ELEMENTS.pastRunScoreDisplay.textContent = calculateRunScore(runData).toFixed(0);
@@ -3415,6 +3508,28 @@ function displayPastRunDetails(runIndex) {
         drawGenericGraph(pastBNPredictionGraphCtx, pastBNPredictionGraphCanvas, bnHistories, runData.bnPredictionGraphHistory.maxLength, 1.05, true);
         populateGraphLegend('pastBNPredictionGraphLegend', bnHistories);
     }, 50);
+}
+
+function displayRunComparison(idxA, idxB) {
+    const runA = completedRuns[idxA];
+    const runB = completedRuns[idxB];
+    if (!runA || !runB) return;
+    DOM_ELEMENTS.pastRunDetails.style.display = 'none';
+    DOM_ELEMENTS.pastRunDetailsModal.style.display = 'none';
+    DOM_ELEMENTS.runComparisonContainer.style.display = 'block';
+    const metrics = [
+        ['AP Score', calculateAutoPilotScore(runA).toFixed(0), calculateAutoPilotScore(runB).toFixed(0)],
+        ['Survival Frames', calculateRunScore(runA).toFixed(0), calculateRunScore(runB).toFixed(0)],
+        ['Final Plant Count', runA.statistics.finalPlantCount, runB.statistics.finalPlantCount],
+        ['Final Prey Count', runA.statistics.finalPreyCount, runB.statistics.finalPreyCount],
+        ['Final Predator Count', runA.statistics.finalPredatorCount, runB.statistics.finalPredatorCount]
+    ];
+    let html = `<h3 class="text-xl font-semibold mb-4 text-center">Run ${runA.runNumber} vs Run ${runB.runNumber}</h3>`;
+    html += '<table class="min-w-full text-sm text-center"><thead><tr><th class="text-left">Metric</th><th>' +
+            `Run ${runA.runNumber}` + '</th><th>' + `Run ${runB.runNumber}` + '</th></tr></thead><tbody>';
+    metrics.forEach(row => { html += `<tr><td class="text-left font-medium">${row[0]}</td><td>${row[1]}</td><td>${row[2]}</td></tr>`; });
+    html += '</tbody></table>';
+    DOM_ELEMENTS.runComparisonStats.innerHTML = html;
 }
 
     function resetSimulation() {
@@ -4000,6 +4115,8 @@ function displayPastRunDetails(runIndex) {
         'bnRunStartPredStarvationRiskPrediction',
         'bnPredictionGraphCanvas', 'bnPredictionGraphLegend',
         'pastBNPredictionGraphCanvas', 'pastBNPredictionGraphLegend',
+        'compareRunsButton', 'runComparisonContainer', 'runComparisonStats', 'closeComparisonButton',
+        'pastRunDetailsModal', 'closePastRunDetailsButton',
         // Add new elements
       ];
       tunableParams.forEach(param => { ids.push(param.id); ids.push(param.id + "Value"); });
