@@ -458,6 +458,27 @@
       border: 1px solid var(--ui-border-color);
     }
 
+    @media (min-width: 1024px) {
+      #pastRunDetailsModal {
+        background-color: transparent;
+        justify-content: flex-end;
+        align-items: stretch;
+        padding: 0;
+      }
+      #pastRunDetails,
+      #runComparisonContainer {
+        max-width: none;
+        width: 400px;
+        height: 100%;
+        overflow-y: auto;
+        border-radius: 0;
+        border-left: 1px solid var(--ui-border-color);
+      }
+      #runComparisonContainer {
+        margin-bottom: 0;
+      }
+    }
+
     .graph-legend {
       display: flex;
       flex-wrap: wrap;
@@ -783,12 +804,11 @@
 
     <button id="compareRunsButton" class="p-2 rounded-md bg-[hsl(var(--base-hue),50%,50%)] hover:bg-[hsl(var(--base-hue),50%,60%)] text-white mb-4" style="display:none;">Compare Selected Runs</button>
 
-    <div id="runComparisonContainer" style="display:none;" class="mb-8">
-      <button id="closeComparisonButton" class="mb-4 p-1 rounded-md bg-[hsl(var(--base-hue),50%,50%)] text-white">Close Comparison</button>
-      <div id="runComparisonStats" class="text-sm"></div>
-    </div>
-
     <div id="pastRunDetailsModal" style="display:none;">
+      <div id="runComparisonContainer" style="display:none;" class="mb-8">
+        <button id="closeComparisonButton" class="mb-4 p-1 rounded-md bg-[hsl(var(--base-hue),50%,50%)] text-white">Close Comparison</button>
+        <div id="runComparisonStats" class="text-sm"></div>
+      </div>
       <div id="pastRunDetails">
         <button id="closePastRunDetailsButton" class="mb-4 p-1 rounded-md bg-[hsl(var(--base-hue),50%,50%)] text-white">Close</button>
       <h3 class="text-xl font-semibold mb-4 text-center">Run <span id="pastRunNumberDisplay"></span> Details
@@ -2791,6 +2811,7 @@ function updateCurrentBNPredictionsDisplay() {
       DOM_ELEMENTS.closePastRunDetailsButton.addEventListener('click', () => {
         DOM_ELEMENTS.pastRunDetailsModal.style.display = 'none';
         DOM_ELEMENTS.pastRunDetails.style.display = 'none';
+        DOM_ELEMENTS.runComparisonContainer.style.display = 'none';
         const selected = DOM_ELEMENTS.pastRunsSummaryList.querySelector('.past-run-summary-item.active-selection');
         if (selected) selected.classList.remove('active-selection');
       });
@@ -2798,6 +2819,7 @@ function updateCurrentBNPredictionsDisplay() {
         if (e.target === DOM_ELEMENTS.pastRunDetailsModal) {
           DOM_ELEMENTS.pastRunDetailsModal.style.display = 'none';
           DOM_ELEMENTS.pastRunDetails.style.display = 'none';
+          DOM_ELEMENTS.runComparisonContainer.style.display = 'none';
           const selected = DOM_ELEMENTS.pastRunsSummaryList.querySelector('.past-run-summary-item.active-selection');
           if (selected) selected.classList.remove('active-selection');
         }
@@ -3539,14 +3561,24 @@ function displayRunComparison(idxA, idxB) {
     const runB = completedRuns[idxB];
     if (!runA || !runB) return;
     DOM_ELEMENTS.pastRunDetails.style.display = 'none';
-    DOM_ELEMENTS.pastRunDetailsModal.style.display = 'none';
     DOM_ELEMENTS.runComparisonContainer.style.display = 'block';
+    DOM_ELEMENTS.pastRunDetailsModal.style.display = 'flex';
     const metrics = [
         ['AP Score', calculateAutoPilotScore(runA).toFixed(0), calculateAutoPilotScore(runB).toFixed(0)],
         ['Survival Frames', calculateRunScore(runA).toFixed(0), calculateRunScore(runB).toFixed(0)],
+        ['Initial Plants', runA.parameters.initialPlants, runB.parameters.initialPlants],
+        ['Initial Prey', runA.parameters.initialPrey, runB.parameters.initialPrey],
+        ['Initial Predators', runA.parameters.initialPredators, runB.parameters.initialPredators],
         ['Final Plant Count', runA.statistics.finalPlantCount, runB.statistics.finalPlantCount],
         ['Final Prey Count', runA.statistics.finalPreyCount, runB.statistics.finalPreyCount],
-        ['Final Predator Count', runA.statistics.finalPredatorCount, runB.statistics.finalPredatorCount]
+        ['Final Predator Count', runA.statistics.finalPredatorCount, runB.statistics.finalPredatorCount],
+        ['Plant Births', runA.statistics.totalPlantBirths, runB.statistics.totalPlantBirths],
+        ['Prey Births', runA.statistics.totalPreyBirths, runB.statistics.totalPreyBirths],
+        ['Predator Births', runA.statistics.totalPredatorBirths, runB.statistics.totalPredatorBirths],
+        ['Prey Predation Deaths', runA.statistics.totalPreyDeathsByPredation, runB.statistics.totalPreyDeathsByPredation],
+        ['Prey Starvation Deaths', runA.statistics.totalPreyDeathsByStarvation, runB.statistics.totalPreyDeathsByStarvation],
+        ['Predator Starvation Deaths', runA.statistics.totalPredatorDeathsByStarvation, runB.statistics.totalPredatorDeathsByStarvation],
+        ['Predator Mobbing Deaths', runA.statistics.totalPredatorDeathsByMobbing, runB.statistics.totalPredatorDeathsByMobbing]
     ];
     let html = `<h3 class="text-xl font-semibold mb-4 text-center">Run ${runA.runNumber} vs Run ${runB.runNumber}</h3>`;
     html += '<table class="min-w-full text-sm text-center"><thead><tr><th class="text-left">Metric</th><th>' +
