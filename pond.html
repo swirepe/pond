@@ -16,6 +16,7 @@
       --ui-bg-color-solid: hsl(var(--base-hue), 15%, 15%);
       --ui-border-color: hsl(var(--base-hue), 15%, 30%);
       --ui-accent-color: hsl(var(--base-hue), 50%, 50%);
+      --ui-accent-hover-color: hsl(var(--base-hue), 50%, 60%);
 
 
       --plant-color: hsl(calc(var(--base-hue) + 120), 60%, 50%);
@@ -533,14 +534,25 @@
     .border-opacity-30 { border-color: hsla(var(--base-hue), 15%, 30%, 0.3); }
 
     .bg-\[hsl\(var\(--base-hue\),15%,10%\)\] { background-color: hsl(var(--base-hue),15%,10%); }
-    .bg-\[hsl\(var\(--base-hue\),40%,45%\)\] { background-color: hsl(var(--base-hue),40%,45%); }
-    .hover\:bg-\[hsl\(var\(--base-hue\),40%,55%\)\]:hover { background-color: hsl(var(--base-hue),40%,55%); }
-    .bg-\[hsl\(var\(--base-hue\),45%,45%\)\] { background-color: hsl(var(--base-hue),45%,45%); }
-    .hover\:bg-\[hsl\(var\(--base-hue\),45%,55%\)\]:hover { background-color: hsl(var(--base-hue),45%,55%); }
-    .bg-\[hsl\(var\(--base-hue\),50%,50%\)\] { background-color: hsl(var(--base-hue),50%,50%); }
-    .hover\:bg-\[hsl\(var\(--base-hue\),50%,60%\)\]:hover { background-color: hsl(var(--base-hue),50%,60%); }
-    .bg-\[hsl\(var\(--base-hue\),60%,50%\)\] { background-color: hsl(var(--base-hue),60%,50%); }
-    .hover\:bg-\[hsl\(var\(--base-hue\),60%,60%\)\]:hover { background-color: hsl(var(--base-hue),60%,60%); }
+
+    .btn {
+      --btn-bg: var(--ui-accent-color);
+      --btn-bg-hover: var(--ui-accent-hover-color);
+      display: block;
+      width: 100%;
+      padding: 0.5rem;
+      margin-top: 0.5rem;
+      border-radius: 0.375rem;
+      border: none;
+      box-sizing: border-box;
+      text-align: center;
+      cursor: pointer;
+      color: #ffffff;
+      background-color: var(--btn-bg);
+    }
+    .btn:hover {
+      background-color: var(--btn-bg-hover);
+    }
 
     @media (min-width: 768px) {
       .md\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -559,6 +571,7 @@
     <div id="statsOverlay" class="overlay">
       <h2>Statistics</h2>
       <div>FPS: <span id="fpsDisplay">--</span></div>
+      <div>BN Acc (last 20): <span id="bnAccuracyDisplay">--</span></div>
       <div class="stat-subsection">
         <h3>Populations & Interval Deaths</h3>
         <div>Plants: <span id="plantCount">0</span></div>
@@ -712,20 +725,17 @@
     </div>
     <div class="control-group">
       <h3>Data Management</h3>
-      <button id="exportRunsButton"
-        class="w-full p-2 mt-2 rounded-md bg-[hsl(var(--base-hue),40%,45%)] hover:bg-[hsl(var(--base-hue),40%,55%)] text-white">Export
+      <button id="exportRunsButton" class="btn" style="--btn-bg:hsl(var(--base-hue),40%,45%);--btn-bg-hover:hsl(var(--base-hue),40%,55%);">Export
         Runs Data</button>
       <label for="importRunsFile"
-        class="file-input-label w-full p-2 mt-2 rounded-md bg-[hsl(var(--base-hue),45%,45%)] hover:bg-[hsl(var(--base-hue),45%,55%)] text-white">
+        class="file-input-label btn">
         Import Runs Data
       </label>
       <input type="file" id="importRunsFile" accept=".json" class="hidden-file-input">
     </div>
-    <button id="resetSimulation"
-      class="w-full p-2 mt-2 rounded-md bg-[hsl(var(--base-hue),50%,50%)] hover:bg-[hsl(var(--base-hue),50%,60%)] text-white">Reset
+    <button id="resetSimulation" class="btn">Reset
       Simulation</button>
-    <button id="autoPilotRun"
-      class="w-full p-2 mt-2 rounded-md bg-[hsl(var(--base-hue),60%,50%)] hover:bg-[hsl(var(--base-hue),60%,60%)] text-white">Suggest
+    <button id="autoPilotRun" class="btn" style="--btn-bg:hsl(var(--base-hue),60%,50%);--btn-bg-hover:hsl(var(--base-hue),60%,60%);">Suggest
       & Start Next Run</button>
   </div>
 
@@ -740,8 +750,7 @@
 
 
   <div id="pastRunsViewContainer" style="display: none;">
-    <button id="backToSimulationButton"
-      class="fixed top-5 right-5 p-2 rounded-md bg-[hsl(var(--base-hue),50%,50%)] hover:bg-[hsl(var(--base-hue),50%,60%)] text-white mb-4 z-10">Back
+    <button id="backToSimulationButton" class="fixed top-5 right-5 btn mb-4 z-10" style="width:auto;">Back
       to Simulation</button>
     <h2 class="text-2xl font-bold mb-6 text-center mt-4">Past Runs Summary</h2>
 
@@ -935,6 +944,13 @@
         DOM_ELEMENTS.explorationFactorDisplay.textContent = '0.00';
     }
 
+    const BN_ERROR_HISTORY_LENGTH = 20;
+    let bnPredictionErrors = [];
+    function getBnErrorAverage() {
+      if (bnPredictionErrors.length === 0) return 0.5;
+      return bnPredictionErrors.reduce((a, b) => a + b, 0) / bnPredictionErrors.length;
+    }
+
     let simBayesianNetwork = null;
     let bnPreyExtinctionCPTCounters = {}, bnPredatorExtinctionCPTCounters = {};
     let bnFavorableGrowthPlantCPTCounters = {}, bnFavorableGrowthPreyCPTCounters = {};
@@ -942,10 +958,9 @@
     let bnPreyStarvationRiskCPTCounters = {}, bnPredatorStarvationRiskCPTCounters = {};
 
 
-    const BN_PARAM_BINS = 3; // Number of bins for discretizing continuous parameters for CPT keys
+    const BN_DEFAULT_BIN_COUNT = 3; // Default number of bins for discretizing continuous parameters
     const BN_LAPLACE_SMOOTHING = 1; // Laplace smoothing value for CPTs
     const BN_AUTOPILOT_PREDICTION_THRESHOLD = 0.80; // For BN scoring, how confident for "favorable growth"
-    const BN_MIN_RUNS_FOR_PREDICTION = BN_PARAM_BINS * 15; // Heuristic: Need enough data per bin combination
 
     const AUTOPILOT_CANDIDATE_POOL_SIZE = 1000;
     const AUTOPILOT_PROPORTION_PERTURB = 0.5;
@@ -1422,71 +1437,77 @@
 
     // --- BN Helper Functions ---
     function discretizeContinuousValue(value, min, max, numBins) { if (value <= min) return 0; if (value >= max) return numBins - 1; const binWidth = (max - min) / numBins; if (binWidth === 0) return 0; const binIndex = Math.floor((value - min) / binWidth); return Math.min(binIndex, numBins - 1); }
-    function getParamKeyForCPT(paramValues, parentParamConfigs) { let keyParts = []; for (const pConf of parentParamConfigs) { const val = paramValues[pConf.configKey]; if (val === undefined) { /*console.warn(`Undefined value for ${pConf.configKey} in getParamKeyForCPT`);*/ keyParts.push('NaN'); continue; } const binIndex = discretizeContinuousValue(val, pConf.min, pConf.max, BN_PARAM_BINS); keyParts.push(`b${binIndex}`); } return keyParts.join(','); }
+    function getParamKeyForCPT(paramValues, parentParamConfigs) { let keyParts = []; for (const pConf of parentParamConfigs) { const val = paramValues[pConf.configKey]; if (val === undefined) { /*console.warn(`Undefined value for ${pConf.configKey} in getParamKeyForCPT`);*/ keyParts.push('NaN'); continue; } const binIndex = discretizeContinuousValue(val, pConf.min, pConf.max, pConf.binCount || BN_DEFAULT_BIN_COUNT); keyParts.push(`b${binIndex}`); } return keyParts.join(','); }
 
     const bnParamNodesConfigBase = [ // Base parameters directly from config/sliders
-      { name: 'initialPlants', configKey: 'initialPlants', type: 'continuous', isTunable: true },
-      { name: 'initialPrey', configKey: 'initialPrey', type: 'continuous', isTunable: true },
-      { name: 'initialPredators', configKey: 'initialPredators', type: 'continuous', isTunable: true },
-      { name: 'plantReproduceRate', configKey: 'plantReproduceRate', type: 'continuous', isTunable: true },
-      { name: 'preyReproductionCooldown', configKey: 'preyReproductionCooldown', type: 'continuous', isTunable: true },
-      { name: 'predatorReproductionCooldown', configKey: 'predatorReproductionCooldown', type: 'continuous', isTunable: true },
-      { name: 'preyMaxHealth', configKey: 'preyMaxHealth', type: 'continuous', isTunable: true },
-      { name: 'preyHealthToReproduce', configKey: 'preyHealthToReproduce', type: 'continuous', isTunable: true },
-      { name: 'predatorMaxHealth', configKey: 'predatorMaxHealth', type: 'continuous', isTunable: true },
-      { name: 'predatorHealthToReproduce', configKey: 'predatorHealthToReproduce', type: 'continuous', isTunable: true },
-      { name: 'preyMaxSpeed', configKey: 'preyMaxSpeed', type: 'continuous', isTunable: true },
-      { name: 'preyAgility', configKey: 'preyAgility', type: 'continuous', isTunable: true },
+      { name: 'initialPlants', configKey: 'initialPlants', type: 'continuous', isTunable: true, binCount: BN_DEFAULT_BIN_COUNT },
+      { name: 'initialPrey', configKey: 'initialPrey', type: 'continuous', isTunable: true, binCount: BN_DEFAULT_BIN_COUNT },
+      { name: 'initialPredators', configKey: 'initialPredators', type: 'continuous', isTunable: true, binCount: BN_DEFAULT_BIN_COUNT },
+      { name: 'plantReproduceRate', configKey: 'plantReproduceRate', type: 'continuous', isTunable: true, binCount: BN_DEFAULT_BIN_COUNT },
+      { name: 'preyReproductionCooldown', configKey: 'preyReproductionCooldown', type: 'continuous', isTunable: true, binCount: BN_DEFAULT_BIN_COUNT },
+      { name: 'predatorReproductionCooldown', configKey: 'predatorReproductionCooldown', type: 'continuous', isTunable: true, binCount: BN_DEFAULT_BIN_COUNT },
+      { name: 'preyMaxHealth', configKey: 'preyMaxHealth', type: 'continuous', isTunable: true, binCount: BN_DEFAULT_BIN_COUNT },
+      { name: 'preyHealthToReproduce', configKey: 'preyHealthToReproduce', type: 'continuous', isTunable: true, binCount: BN_DEFAULT_BIN_COUNT },
+      { name: 'predatorMaxHealth', configKey: 'predatorMaxHealth', type: 'continuous', isTunable: true, binCount: BN_DEFAULT_BIN_COUNT },
+      { name: 'predatorHealthToReproduce', configKey: 'predatorHealthToReproduce', type: 'continuous', isTunable: true, binCount: BN_DEFAULT_BIN_COUNT },
+      { name: 'preyMaxSpeed', configKey: 'preyMaxSpeed', type: 'continuous', isTunable: true, binCount: BN_DEFAULT_BIN_COUNT },
+      { name: 'preyAgility', configKey: 'preyAgility', type: 'continuous', isTunable: true, binCount: BN_DEFAULT_BIN_COUNT },
       // preyInertiaEffectStrength, preyTurnSpeedPenaltyFactor (omitted as less critical for high-level BN outcomes, could be added)
-      { name: 'predatorMaxSpeed', configKey: 'predatorMaxSpeed', type: 'continuous', isTunable: true },
-      { name: 'predatorAgility', configKey: 'predatorAgility', type: 'continuous', isTunable: true },
+      { name: 'predatorMaxSpeed', configKey: 'predatorMaxSpeed', type: 'continuous', isTunable: true, binCount: BN_DEFAULT_BIN_COUNT },
+      { name: 'predatorAgility', configKey: 'predatorAgility', type: 'continuous', isTunable: true, binCount: BN_DEFAULT_BIN_COUNT },
       // predatorInertiaEffectStrength, predatorTurnSpeedPenaltyFactor (omitted)
-      { name: 'preyHungerRate', configKey: 'preyHungerRate', type: 'continuous', isTunable: true },
-      { name: 'predatorHungerRate', configKey: 'predatorHungerRate', type: 'continuous', isTunable: true },
+      { name: 'preyHungerRate', configKey: 'preyHungerRate', type: 'continuous', isTunable: true, binCount: BN_DEFAULT_BIN_COUNT },
+      { name: 'predatorHungerRate', configKey: 'predatorHungerRate', type: 'continuous', isTunable: true, binCount: BN_DEFAULT_BIN_COUNT },
       // planktonMode, preyKillPredatorsMode are boolean, handled slightly differently if needed as parents, or implicitly via their effect on outcomes
     ];
 
     const bnDerivedParamNodesConfig = [ // Derived features, calculated from base params
       {
-        name: BN_NODE_NAMES.DERIVED_PREY_TO_PRED_RATIO, configKey: BN_NODE_NAMES.DERIVED_PREY_TO_PRED_RATIO, type: 'continuous', min: 0, max: 50, default: 5, isTunable: false, parentConfigKeys: ['initialPrey', 'initialPredators'],
+        name: BN_NODE_NAMES.DERIVED_PREY_TO_PRED_RATIO, configKey: BN_NODE_NAMES.DERIVED_PREY_TO_PRED_RATIO, type: 'continuous', min: 0, max: 50, default: 5, isTunable: false, binCount: BN_DEFAULT_BIN_COUNT, parentConfigKeys: ['initialPrey', 'initialPredators'],
         calculate: (p, globalConf) => (p.initialPredators > 0 ? p.initialPrey / p.initialPredators : p.initialPrey * 2)
       }, // High ratio if no preds
       {
-        name: BN_NODE_NAMES.DERIVED_PLANT_TO_PREY_RATIO, configKey: BN_NODE_NAMES.DERIVED_PLANT_TO_PREY_RATIO, type: 'continuous', min: 0, max: 50, default: 5, isTunable: false, parentConfigKeys: ['initialPlants', 'initialPrey'],
+        name: BN_NODE_NAMES.DERIVED_PLANT_TO_PREY_RATIO, configKey: BN_NODE_NAMES.DERIVED_PLANT_TO_PREY_RATIO, type: 'continuous', min: 0, max: 50, default: 5, isTunable: false, binCount: BN_DEFAULT_BIN_COUNT, parentConfigKeys: ['initialPlants', 'initialPrey'],
         calculate: (p, globalConf) => (p.initialPrey > 0 ? p.initialPlants / p.initialPrey : p.initialPlants * 2)
       }, // High ratio if no prey
       {
-        name: BN_NODE_NAMES.DERIVED_PREY_REPRO_HEALTH_RATIO, configKey: BN_NODE_NAMES.DERIVED_PREY_REPRO_HEALTH_RATIO, type: 'continuous', min: 0.25, max: 1.0, default: 0.75, isTunable: false, parentConfigKeys: ['preyHealthToReproduce', 'preyMaxHealth'],
+        name: BN_NODE_NAMES.DERIVED_PREY_REPRO_HEALTH_RATIO, configKey: BN_NODE_NAMES.DERIVED_PREY_REPRO_HEALTH_RATIO, type: 'continuous', min: 0.25, max: 1.0, default: 0.75, isTunable: false, binCount: BN_DEFAULT_BIN_COUNT, parentConfigKeys: ['preyHealthToReproduce', 'preyMaxHealth'],
         calculate: (p, globalConf) => (p.preyMaxHealth > 0 ? Math.max(0.25, Math.min(1.0, p.preyHealthToReproduce / p.preyMaxHealth)) : 0.75)
       },
       {
-        name: BN_NODE_NAMES.DERIVED_PRED_REPRO_HEALTH_RATIO, configKey: BN_NODE_NAMES.DERIVED_PRED_REPRO_HEALTH_RATIO, type: 'continuous', min: 0.25, max: 1.0, default: 0.75, isTunable: false, parentConfigKeys: ['predatorHealthToReproduce', 'predatorMaxHealth'],
+        name: BN_NODE_NAMES.DERIVED_PRED_REPRO_HEALTH_RATIO, configKey: BN_NODE_NAMES.DERIVED_PRED_REPRO_HEALTH_RATIO, type: 'continuous', min: 0.25, max: 1.0, default: 0.75, isTunable: false, binCount: BN_DEFAULT_BIN_COUNT, parentConfigKeys: ['predatorHealthToReproduce', 'predatorMaxHealth'],
         calculate: (p, globalConf) => (p.predatorMaxHealth > 0 ? Math.max(0.25, Math.min(1.0, p.predatorHealthToReproduce / p.predatorMaxHealth)) : 0.75)
       },
       {
-        name: BN_NODE_NAMES.DERIVED_RELATIVE_PREY_SPEED, configKey: BN_NODE_NAMES.DERIVED_RELATIVE_PREY_SPEED, type: 'continuous', min: 0.2, max: 3.0, default: 1.0, isTunable: false, parentConfigKeys: ['preyMaxSpeed', 'predatorMaxSpeed'],
+        name: BN_NODE_NAMES.DERIVED_RELATIVE_PREY_SPEED, configKey: BN_NODE_NAMES.DERIVED_RELATIVE_PREY_SPEED, type: 'continuous', min: 0.2, max: 3.0, default: 1.0, isTunable: false, binCount: BN_DEFAULT_BIN_COUNT, parentConfigKeys: ['preyMaxSpeed', 'predatorMaxSpeed'],
         calculate: (p, globalConf) => (p.predatorMaxSpeed > 0 ? p.preyMaxSpeed / p.predatorMaxSpeed : p.preyMaxSpeed)
       },
 
       // More advanced derived features
       {
-        name: BN_NODE_NAMES.DERIVED_PREY_ENERGY_BUDGET, configKey: BN_NODE_NAMES.DERIVED_PREY_ENERGY_BUDGET, type: 'continuous', min: 0, max: 5000, default: 500, isTunable: false, parentConfigKeys: ['preyHealthGainFromPlant', 'preyHungerRate', 'plantReproduceRate', 'initialPrey', 'initialPlants'],
+        name: BN_NODE_NAMES.DERIVED_PREY_ENERGY_BUDGET, configKey: BN_NODE_NAMES.DERIVED_PREY_ENERGY_BUDGET, type: 'continuous', min: 0, max: 5000, default: 500, isTunable: false, binCount: BN_DEFAULT_BIN_COUNT, parentConfigKeys: ['preyHealthGainFromPlant', 'preyHungerRate', 'plantReproduceRate', 'initialPrey', 'initialPlants'],
         calculate: (p, globalConf) => (globalConf.preyHealthGainFromPlant / Math.max(0.1, p.preyHungerRate)) * (p.plantReproduceRate / Math.max(0.01, p.initialPrey / Math.max(1, p.initialPlants)))
       }, // Health gain per hunger * plant growth per prey
       {
-        name: BN_NODE_NAMES.DERIVED_PREDATOR_CHASE_SUCCESS, configKey: BN_NODE_NAMES.DERIVED_PREDATOR_CHASE_SUCCESS, type: 'continuous', min: 0.05, max: 20, default: 1, isTunable: false, parentConfigKeys: ['predatorMaxSpeed', 'preyMaxSpeed', 'predatorAgility', 'preyAgility'],
+        name: BN_NODE_NAMES.DERIVED_PREDATOR_CHASE_SUCCESS, configKey: BN_NODE_NAMES.DERIVED_PREDATOR_CHASE_SUCCESS, type: 'continuous', min: 0.05, max: 20, default: 1, isTunable: false, binCount: BN_DEFAULT_BIN_COUNT, parentConfigKeys: ['predatorMaxSpeed', 'preyMaxSpeed', 'predatorAgility', 'preyAgility'],
         calculate: (p, globalConf) => (p.predatorMaxSpeed * p.predatorAgility) / Math.max(0.01, p.preyMaxSpeed * p.preyAgility)
       }, // Relative maneuverability and speed
       {
-        name: BN_NODE_NAMES.DERIVED_PREY_REPRODUCTIVE_POTENTIAL, configKey: BN_NODE_NAMES.DERIVED_PREY_REPRODUCTIVE_POTENTIAL, type: 'continuous', min: -20, max: 200, default: 10, isTunable: false, parentConfigKeys: ['preyMaxHealth', 'preyReproductionCooldown', 'preyHungerRate'],
+        name: BN_NODE_NAMES.DERIVED_PREY_REPRODUCTIVE_POTENTIAL, configKey: BN_NODE_NAMES.DERIVED_PREY_REPRODUCTIVE_POTENTIAL, type: 'continuous', min: -20, max: 200, default: 10, isTunable: false, binCount: BN_DEFAULT_BIN_COUNT, parentConfigKeys: ['preyMaxHealth', 'preyReproductionCooldown', 'preyHungerRate'],
         calculate: (p, globalConf) => (p.preyMaxHealth - globalConf.preyReproductionCost) / Math.max(1, p.preyReproductionCooldown * p.preyHungerRate)
       }, // Net health after repro / time to next repro considering hunger
       {
-        name: BN_NODE_NAMES.DERIVED_PREDATOR_REPRODUCTIVE_POTENTIAL, configKey: BN_NODE_NAMES.DERIVED_PREDATOR_REPRODUCTIVE_POTENTIAL, type: 'continuous', min: -20, max: 200, default: 10, isTunable: false, parentConfigKeys: ['predatorMaxHealth', 'predatorReproductionCooldown', 'predatorHungerRate'],
+        name: BN_NODE_NAMES.DERIVED_PREDATOR_REPRODUCTIVE_POTENTIAL, configKey: BN_NODE_NAMES.DERIVED_PREDATOR_REPRODUCTIVE_POTENTIAL, type: 'continuous', min: -20, max: 200, default: 10, isTunable: false, binCount: BN_DEFAULT_BIN_COUNT, parentConfigKeys: ['predatorMaxHealth', 'predatorReproductionCooldown', 'predatorHungerRate'],
         calculate: (p, globalConf) => (p.predatorMaxHealth - globalConf.predatorReproductionCost) / Math.max(1, p.predatorReproductionCooldown * p.predatorHungerRate)
       },
     ];
     let allBnParamAndDerivedNodeConfigs = []; // Will be populated in initBN
+
+    function getBNMinRunsForPrediction() {
+      const allConfigs = [...bnParamNodesConfigBase, ...bnDerivedParamNodesConfig];
+      const maxBins = Math.max(...allConfigs.map(c => c.binCount || BN_DEFAULT_BIN_COUNT));
+      return maxBins * 15; // Heuristic: more bins require more runs
+    }
 
     // Calculates derived parameters given a set of base parameters and the global config context
     function calculateDerivedParams(baseParams, fullConfigContext = config) {
@@ -1505,7 +1526,7 @@
     }
 
 
-    function isBNReady() { return simBayesianNetwork && completedRuns.length >= BN_MIN_RUNS_FOR_PREDICTION; }
+    function isBNReady() { return simBayesianNetwork && completedRuns.length >= getBNMinRunsForPrediction(); }
 
     function initBN() {
       simBayesianNetwork = new BayesianNetwork();
@@ -1599,7 +1620,7 @@
 
     // Initializes CPT for a discrete outcome node with Laplace smoothing
     function initializeNodeCPT(node, parentParamConfigsForNode, cptCounters) {
-      const parentBinCounts = parentParamConfigsForNode.map(() => BN_PARAM_BINS);
+      const parentBinCounts = parentParamConfigsForNode.map(p => p.binCount || BN_DEFAULT_BIN_COUNT);
       const numParentCombinations = parentBinCounts.reduce((acc, val) => acc * val, 1);
 
       const currentParentBins = new Array(parentParamConfigsForNode.length).fill(0);
@@ -1626,7 +1647,7 @@
         let k_idx = 0;
         while (k_idx < parentParamConfigsForNode.length) {
           currentParentBins[k_idx]++;
-          if (currentParentBins[k_idx] < BN_PARAM_BINS) break; // No carry-over
+          if (currentParentBins[k_idx] < parentBinCounts[k_idx]) break; // No carry-over
           currentParentBins[k_idx] = 0; // Reset and carry-over
           k_idx++;
         }
@@ -1709,6 +1730,39 @@
       for (const state of node.states) {
         node.cpt[key][state] = (cptCounters[key][state] || BN_LAPLACE_SMOOTHING) / totalForKeyWithSmoothing;
       }
+    }
+
+    function computeBNPredictionError(runData) {
+      const preds = runData.statistics.bnPredictionsAtRunStart;
+      if (!preds) return null;
+      const stats = runData.statistics;
+      const params = runData.parameters;
+      const duration = runData.durationFrames > 0 ? runData.durationFrames : 1;
+
+      const actualExtPrey = (stats.deathFrames.prey !== null && params.initialPrey > 0) ? 1 : 0;
+      const actualExtPred = (stats.deathFrames.predator !== null && params.initialPredators > 0) ? 1 : 0;
+      const actualGrowthPlant = (stats.totalPlantBirths / duration) > (stats.totalPlantsConsumed / duration) ? 1 : 0;
+      const actualGrowthPrey = (stats.totalPreyBirths / duration) > ((stats.totalPreyDeathsByPredation + stats.totalPreyDeathsByStarvation) / duration) ? 1 : 0;
+      const actualGrowthPred = (stats.totalPredatorBirths / duration) > ((stats.totalPredatorDeathsByStarvation + stats.totalPredatorDeathsByMobbing) / duration) ? 1 : 0;
+
+      const errors = [];
+      if (preds.extinction && preds.extinction.prey !== undefined && params.initialPrey > 0) {
+        errors.push(Math.pow(preds.extinction.prey - actualExtPrey, 2));
+      }
+      if (preds.extinction && preds.extinction.predator !== undefined && params.initialPredators > 0) {
+        errors.push(Math.pow(preds.extinction.predator - actualExtPred, 2));
+      }
+      if (preds.growth && preds.growth.plant !== undefined && params.initialPlants > 0) {
+        errors.push(Math.pow(preds.growth.plant - actualGrowthPlant, 2));
+      }
+      if (preds.growth && preds.growth.prey !== undefined && params.initialPrey > 0) {
+        errors.push(Math.pow(preds.growth.prey - actualGrowthPrey, 2));
+      }
+      if (preds.growth && preds.growth.predator !== undefined && params.initialPredators > 0) {
+        errors.push(Math.pow(preds.growth.predator - actualGrowthPred, 2));
+      }
+      if (errors.length === 0) return null;
+      return errors.reduce((a, b) => a + b, 0) / errors.length;
     }
 
     // Predicts extinction probabilities for given candidate parameters
@@ -2703,6 +2757,7 @@ function updateCurrentBNPredictionsDisplay() {
           drawCumulativeGraph();
           updateRunStartBNPredictionsDisplay();
           updateCurrentBNPredictionsDisplay();
+          updateBnAccuracyDisplay();
         }
       });
       DOM_ELEMENTS.controlsToggle.addEventListener('click', () => { DOM_ELEMENTS.controlsOverlay.classList.toggle('visible'); });
@@ -2724,6 +2779,12 @@ function updateCurrentBNPredictionsDisplay() {
           }, 0);
         }
         document.body.style.overflow = 'auto'; // Allow scrolling in past runs view
+        // Hide overlays and their toggles when viewing past runs
+        DOM_ELEMENTS.statsOverlay.classList.remove('visible');
+        DOM_ELEMENTS.controlsOverlay.classList.remove('visible');
+        DOM_ELEMENTS.statsToggle.style.display = 'none';
+        DOM_ELEMENTS.controlsToggle.style.display = 'none';
+        DOM_ELEMENTS.pastRunsToggleMain.style.display = 'none';
         populatePastRunsSummaryList();
         DOM_ELEMENTS.pastRunDetails.style.display = 'none'; // Hide details initially
       });
@@ -2739,6 +2800,10 @@ function updateCurrentBNPredictionsDisplay() {
           animationFrameId = requestAnimationFrame(gameLoop);
         }
         DOM_ELEMENTS.currentRunInfo.classList.add('visible');
+        // Show overlay toggles again when returning to simulation
+        DOM_ELEMENTS.statsToggle.style.display = 'block';
+        DOM_ELEMENTS.controlsToggle.style.display = 'block';
+        DOM_ELEMENTS.pastRunsToggleMain.style.display = 'block';
       });
       DOM_ELEMENTS.currentRunInfo.classList.add('visible'); // Show current run info by default
 
@@ -2825,6 +2890,7 @@ function updateCurrentBNPredictionsDisplay() {
       resetSimulation(); // Resets entities, populations, and history arrays
       updateRunStartBNPredictionsDisplay(); // Show BN predictions for this run
       updateCurrentBNPredictionsDisplay(); // Update BN display for the *new* current parameters
+      updateBnAccuracyDisplay();
 
       DOM_ELEMENTS.currentRunInfo.classList.add('visible');
       lastTimestamp = performance.now(); // Reset for game loop delta time
@@ -3124,7 +3190,8 @@ function updateCurrentBNPredictionsDisplay() {
 
       const GP_MEAN_WEIGHT = 0.40;
       const UCB_BONUS_WEIGHT = 0.20;
-      const BN_SCORE_WEIGHT = 0.40;
+      const BN_SCORE_WEIGHT_BASE = 0.40;
+      const BN_SCORE_WEIGHT = BN_SCORE_WEIGHT_BASE * Math.max(0, 1 - getBnErrorAverage());
 
       candidates.forEach(c => {
         let gpMean = 0;
@@ -3193,6 +3260,7 @@ function updateCurrentBNPredictionsDisplay() {
         starvationRisk: isBNReady() ? predictStarvationRiskProbabilities(bestCandidate.params) : { prey: 0.5, predator: 0.5, error: "BN not ready" },
       };
 
+
       console.log(`Autopilot selected (Source: ${bestCandidate.source}). Top Score: ${bestCandidate.score.toFixed(0)}. Stagnation: ${autoPilotStats.stagnationCounter}, Exploration: ${explorationFactor.toFixed(2)}, ModelUncert: ${autoPilotStats.modelUncertainty.toFixed(2)}, Kappa: ${KAPPA_UCB.toFixed(2)}`);
       console.log(`  GP Pred: Mean=${bestCandidate.debug_gp_mean.toFixed(0)}, Var=${bestCandidate.debug_gp_variance.toFixed(3)}. BN Comp: ${bestCandidate.debug_bn_component.toFixed(0)}`);
       if (bnPredictionsForNextRun.extinction && bnPredictionsForNextRun.growth && bnPredictionsForNextRun.starvationRisk) {
@@ -3246,6 +3314,14 @@ function updateCurrentBNPredictionsDisplay() {
       };
       completedRuns.push(runData);
 
+      const brier = computeBNPredictionError(runData);
+      if (brier !== null) {
+        bnPredictionErrors.push(brier);
+        if (bnPredictionErrors.length > BN_ERROR_HISTORY_LENGTH) bnPredictionErrors.shift();
+        runData.statistics.bnPredictionBrierScore = brier;
+        updateBnAccuracyDisplay();
+      }
+
       if (gpOptimizer && runData.durationFrames > 30) {
         const scoreForGP = calculateAutoPilotScore(runData);
         gpOptimizer.addObservation(runData.parameters, scoreForGP);
@@ -3288,6 +3364,12 @@ function updateCurrentBNPredictionsDisplay() {
       DOM_ELEMENTS.bnRunStartPredatorGrowthPrediction.textContent = grow && !grow.error ? grow.predator.toFixed(3) : 'N/A';
       DOM_ELEMENTS.bnRunStartPreyStarvationRiskPrediction.textContent = starv && !starv.error ? starv.prey.toFixed(3) : 'N/A';
       DOM_ELEMENTS.bnRunStartPredStarvationRiskPrediction.textContent = starv && !starv.error ? starv.predator.toFixed(3) : 'N/A';
+    }
+
+    function updateBnAccuracyDisplay() {
+      if (!DOM_ELEMENTS.bnAccuracyDisplay) return;
+      const avgErr = getBnErrorAverage();
+      DOM_ELEMENTS.bnAccuracyDisplay.textContent = isNaN(avgErr) ? 'N/A' : (1 - avgErr).toFixed(3);
     }
 
 function populatePastRunsSummaryList() {
@@ -4086,7 +4168,7 @@ function displayPastRunDetails(runIndex) {
         'pastPopulationGraphCanvas', 'pastCumulativeGraphCanvas', 'bayesianNetworkVisualizationCanvas',
         'simulationViewContainer', 'pastRunsViewContainer', 'bayesianNetworkVisualizationContainer',
         'pageHeader', 'pageSubheader', 'statsToggle', 'statsOverlay', 'controlsToggle', 'controlsOverlay',
-        'fpsDisplay', 'plantCount', 'preyCount', 'predatorCount', 'totalEntities',
+        'fpsDisplay', 'bnAccuracyDisplay', 'plantCount', 'preyCount', 'predatorCount', 'totalEntities',
         'plantBirthsDisplay', 'plantsConsumedDisplay', 'preyBirthsDisplay', 'predatorBirthsDisplay',
         'totalPreyDeathsDisplay', 'totalPredatorDeathsDisplay',
         'preyPredationDeathsDisplay', 'preyStarvationDeathsDisplay',
@@ -4173,6 +4255,7 @@ function displayPastRunDetails(runIndex) {
       bnPredictionsForNextRun = { extinction: bnExtPreds, growth: bnGrowthPreds, starvationRisk: bnStarvPreds };
       updateRunStartBNPredictionsDisplay();
       updateCurrentBNPredictionsDisplay(); // Show these predictions
+      updateBnAccuracyDisplay();
 
       // Start the first run with the initial (potentially URL-modified) config
       startNewRun(currentEffectiveConfig);
