@@ -3207,15 +3207,6 @@ function displayPastRunDetails(runIndex) {
     statsHtml += `<li>Plant: ${plantBirthRate > plantConsumptionRate ? 'Achieved' : 'Not Achieved'} (B:${plantBirthRate.toFixed(3)}, C:${plantConsumptionRate.toFixed(3)})</li>`;
     statsHtml += `<li>Prey: ${preyBirthRate > preyDeathRateTotal ? 'Achieved' : 'Not Achieved'} (B:${preyBirthRate.toFixed(3)}, D:${preyDeathRateTotal.toFixed(3)})</li>`;
     statsHtml += `<li>Predator: ${predBirthRate > predDeathRateTotal ? 'Achieved' : 'Not Achieved'} (B:${predBirthRate.toFixed(3)}, D:${predDeathRateTotal.toFixed(3)})</li></ul></li>`;
-    statsHtml += `<li class="mt-1 pt-1 border-t border-[var(--ui-border-color)] border-opacity-30"><strong>BN Preds (at run start):</strong>`;
-    if (statDetails.bnPredictionsAtRunStart) {
-        const { extinction: extP, growth: growthP, starvationRisk: starvP } = statDetails.bnPredictionsAtRunStart;
-        statsHtml += `<ul class="list-disc ml-5 text-xs">`;
-        statsHtml += `<li>Ext: P ${extP?.prey?.toFixed(3) ?? 'N/A'}, R ${extP?.predator?.toFixed(3) ?? 'N/A'} ${extP?.error ? '('+extP.error.substring(0,10)+'..)' : ''}</li>`;
-        statsHtml += `<li>Grow: Pl ${growthP?.plant?.toFixed(3) ?? 'N/A'}, P ${growthP?.prey?.toFixed(3) ?? 'N/A'}, R ${growthP?.predator?.toFixed(3) ?? 'N/A'} ${growthP?.error ? '('+growthP.error.substring(0,10)+'..)' : ''}</li>`;
-        statsHtml += `<li>StarvRisk: P ${starvP?.prey?.toFixed(3) ?? 'N/A'}, R ${starvP?.predator?.toFixed(3) ?? 'N/A'} ${starvP?.error ? '('+starvP.error.substring(0,10)+'..)' : ''}</li>`;
-        statsHtml += `</ul></li>`;
-    } else statsHtml += ` N/A</li>`;
     statsHtml += '</ul>';
     
     DOM_ELEMENTS.pastRunStatsDisplay.innerHTML = statsHtml;
