@@ -407,6 +407,10 @@
       border-color: hsl(var(--base-hue), 20%, 50%);
     }
 
+    .past-run-summary-item.compare-selected {
+      outline: 2px dashed hsl(var(--base-hue), 50%, 60%);
+    }
+
     .compare-checkbox {
       margin-right: 6px;
     }
@@ -2755,7 +2759,10 @@ function updateCurrentBNPredictionsDisplay() {
         DOM_ELEMENTS.pastRunDetails.style.display = 'none';
         selectedRunIndicesForCompare = [];
         const boxes = DOM_ELEMENTS.pastRunsSummaryList.querySelectorAll('.compare-checkbox');
-        boxes.forEach(b => b.checked = false);
+        boxes.forEach(b => {
+          b.checked = false;
+          b.closest('.past-run-summary-item')?.classList.remove('compare-selected');
+        });
       });
       DOM_ELEMENTS.currentRunInfo.classList.add('visible'); // Show current run info by default
 
@@ -2775,7 +2782,10 @@ function updateCurrentBNPredictionsDisplay() {
         DOM_ELEMENTS.pastRunDetails.style.display = 'none';
         selectedRunIndicesForCompare = [];
         const boxes = DOM_ELEMENTS.pastRunsSummaryList.querySelectorAll('.compare-checkbox');
-        boxes.forEach(b => b.checked = false);
+        boxes.forEach(b => {
+          b.checked = false;
+          b.closest('.past-run-summary-item')?.classList.remove('compare-selected');
+        });
       });
 
       DOM_ELEMENTS.closePastRunDetailsButton.addEventListener('click', () => {
@@ -2783,6 +2793,14 @@ function updateCurrentBNPredictionsDisplay() {
         DOM_ELEMENTS.pastRunDetails.style.display = 'none';
         const selected = DOM_ELEMENTS.pastRunsSummaryList.querySelector('.past-run-summary-item.active-selection');
         if (selected) selected.classList.remove('active-selection');
+      });
+      DOM_ELEMENTS.pastRunDetailsModal.addEventListener('click', (e) => {
+        if (e.target === DOM_ELEMENTS.pastRunDetailsModal) {
+          DOM_ELEMENTS.pastRunDetailsModal.style.display = 'none';
+          DOM_ELEMENTS.pastRunDetails.style.display = 'none';
+          const selected = DOM_ELEMENTS.pastRunsSummaryList.querySelector('.past-run-summary-item.active-selection');
+          if (selected) selected.classList.remove('active-selection');
+        }
       });
     }
 
@@ -3306,15 +3324,21 @@ function populatePastRunsSummaryList() {
         checkbox.addEventListener('click', (e) => {
             e.stopPropagation();
             const runIdx = parseInt(checkbox.dataset.runIndex);
+            const parent = checkbox.closest('.past-run-summary-item');
             if (checkbox.checked) {
                 selectedRunIndicesForCompare.push(runIdx);
+                parent.classList.add('compare-selected');
                 if (selectedRunIndicesForCompare.length > 2) {
                     const removed = selectedRunIndicesForCompare.shift();
                     const cb = summaryListDiv.querySelector(`.compare-checkbox[data-run-index='${removed}']`);
-                    if (cb) cb.checked = false;
+                    if (cb) {
+                        cb.checked = false;
+                        cb.closest('.past-run-summary-item')?.classList.remove('compare-selected');
+                    }
                 }
             } else {
                 selectedRunIndicesForCompare = selectedRunIndicesForCompare.filter(i => i !== runIdx);
+                parent.classList.remove('compare-selected');
             }
             DOM_ELEMENTS.compareRunsButton.style.display = selectedRunIndicesForCompare.length === 2 ? 'block' : 'none';
         });
