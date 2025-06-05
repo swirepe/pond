@@ -544,6 +544,7 @@
       margin-top: 0.5rem;
       border-radius: 0.375rem;
       border: none;
+      <div>BN CV Acc: <span id="bnCvAccuracyDisplay">--</span></div>
       box-sizing: border-box;
       text-align: center;
       cursor: pointer;
@@ -890,8 +891,11 @@
     };
     const cumulativeHistory = {
       plantBirths: [], preyBirths: [], predatorBirths: [],
-      totalPreyDeaths: [], totalPredatorDeaths: [],
-      plantsConsumed: [],
+const BN_ERROR_HISTORY_LENGTH = 20;
+let bnPredictionErrors = [];
+let bnCrossValidationError = null;
+const MAX_SAVED_CANDIDATES = 5;
+let savedTopCandidates = [];
       maxLength: 200
     };
 
@@ -1717,9 +1721,35 @@
 
       const key = getParamKeyForCPT(relevantRunParamsForCPTKey, parentParamConfigsForNode);
 
-      // Initialize counter for this key if it doesn't exist
-      if (!cptCounters[key]) {
-        cptCounters[key] = {};
+  if (errors.length === 0) return null;
+  return errors.reduce((a, b) => a + b, 0) / errors.length;
+}
+
+function trainBNFromRuns(runs) {
+  initBN();
+  runs.forEach(r => updateBNWithRunData(r));
+}
+
+function crossValidateBN(sampleSize = 5) {
+  if (completedRuns.length < sampleSize + 1) return null;
+  const sampleRuns = completedRuns.slice(-sampleSize);
+  const errs = [];
+  for (let i = 0; i < sampleRuns.length; i++) {
+    const trainingRuns = sampleRuns.filter((_, idx) => idx !== i);
+    trainBNFromRuns(trainingRuns);
+    const preds = {
+      extinction: predictExtinctionProbabilities(sampleRuns[i].parameters),
+      growth: predictFavorableGrowth(sampleRuns[i].parameters),
+      starvationRisk: predictStarvationRiskProbabilities(sampleRuns[i].parameters),
+    };
+    const runCopy = JSON.parse(JSON.stringify(sampleRuns[i]));
+    runCopy.statistics.bnPredictionsAtRunStart = preds;
+    const err = computeBNPredictionError(runCopy);
+    if (err !== null) errs.push(err);
+  }
+  trainBNFromRuns(completedRuns);
+  return errs.length > 0 ? errs.reduce((a, b) => a + b, 0) / errs.length : null;
+}
         node.states.forEach(s => cptCounters[key][s] = BN_LAPLACE_SMOOTHING);
       }
       // Ensure counter for the specific outcome state exists
@@ -2778,6 +2808,11 @@ function updateCurrentBNPredictionsDisplay() {
       // Past Runs View Toggle & Back Button
       DOM_ELEMENTS.pastRunsToggleMain.addEventListener('click', () => {
         simulationIsActive = false; // Pause simulation
+          if (lastRunAutoPilotScore > -5000) {
+            savedTopCandidates.push({ params: JSON.parse(JSON.stringify(lastRunData.parameters)), score: lastRunAutoPilotScore });
+            savedTopCandidates.sort((a,b) => b.score - a.score);
+            if (savedTopCandidates.length > MAX_SAVED_CANDIDATES) savedTopCandidates.pop();
+          }
         simulationViewContainer.style.display = 'none';
         pastRunsViewContainer.style.display = 'block';
         bnVisualizationContainer.style.display = simBayesianNetwork ? 'block' : 'none';
@@ -3086,6 +3121,10 @@ function updateCurrentBNPredictionsDisplay() {
 
       const dynProps = getCandidateProportions(explorationFactor);
 
+      savedTopCandidates.forEach(sc => {
+        candidates.push({ params: JSON.parse(JSON.stringify(sc.params)), score: 0, source: 'saved' });
+      });
+
       const validRunsForBase = completedRuns
         .map(r => ({ ...r, autoPilotScore: calculateAutoPilotScore(r) }))
         .filter(r => r.durationFrames > 30 && r.autoPilotScore > -9000);
@@ -3232,11 +3271,19 @@ function updateCurrentBNPredictionsDisplay() {
           if (!bnExtPreds.error) {
             if (c.params.initialPrey > 0) rawBnScore -= Math.pow(bnExtPreds.prey, 2) * SCORE_WEIGHT_EXTINCTION_PENALTY_SQUARED;
             if (c.params.initialPredators > 0) rawBnScore -= Math.pow(bnExtPreds.predator, 2) * SCORE_WEIGHT_EXTINCTION_PENALTY_SQUARED;
-          }
-          if (!bnGrowthPreds.error) {
-            if (c.params.initialPlants > 0) { activeSpeciesCountBN++; rawBnScore += bnGrowthPreds.plant * SCORE_WEIGHT_GROWTH_BONUS; if (bnGrowthPreds.plant < BN_AUTOPILOT_PREDICTION_THRESHOLD) allActiveSpeciesFavorableGrowthBN = false; }
-            if (c.params.initialPrey > 0) { activeSpeciesCountBN++; rawBnScore += bnGrowthPreds.prey * SCORE_WEIGHT_GROWTH_BONUS; if (bnGrowthPreds.prey < BN_AUTOPILOT_PREDICTION_THRESHOLD) allActiveSpeciesFavorableGrowthBN = false; }
-            if (c.params.initialPredators > 0) { activeSpeciesCountBN++; rawBnScore += bnGrowthPreds.predator * SCORE_WEIGHT_GROWTH_BONUS; if (bnGrowthPreds.predator < BN_AUTOPILOT_PREDICTION_THRESHOLD) allActiveSpeciesFavorableGrowthBN = false; }
+        bnCrossValidationError = crossValidateBN();
+        updateBnCvAccuracyDisplay();
+function updateBnAccuracyDisplay() {
+  if (!DOM_ELEMENTS.bnAccuracyDisplay) return;
+  const avgErr = getBnErrorAverage();
+  DOM_ELEMENTS.bnAccuracyDisplay.textContent = isNaN(avgErr) ? 'N/A' : (1 - avgErr).toFixed(3);
+}
+
+function updateBnCvAccuracyDisplay() {
+  if (!DOM_ELEMENTS.bnCvAccuracyDisplay) return;
+  const err = bnCrossValidationError;
+  DOM_ELEMENTS.bnCvAccuracyDisplay.textContent = err === null || isNaN(err) ? 'N/A' : (1 - err).toFixed(3);
+}
           } else { allActiveSpeciesFavorableGrowthBN = false; }
 
           if (activeSpeciesCountBN > 0 && allActiveSpeciesFavorableGrowthBN) {
@@ -3946,7 +3993,7 @@ function displayPastRunDetails(runIndex) {
               else if (entity.target instanceof Prey) ctx.strokeStyle = 'hsla(60, 70%, 60%, 0.2)';
               else if (entity.target instanceof Predator) ctx.strokeStyle = 'hsla(0, 70%, 60%, 0.25)';
               else ctx.strokeStyle = 'hsla(0, 0%, 100%, 0.15)';
-              ctx.stroke();
+          resetAutoPilotStats(); currentRunNumber = completedRuns.length > 0 ? Math.max(...completedRuns.map(r => r.runNumber), 0) : 0; populatePastRunsSummaryList(); bnCrossValidationError = crossValidateBN(); updateBnCvAccuracyDisplay(); updateCurrentBNPredictionsDisplay(); if (DOM_ELEMENTS.pastRunDetails.style.display === 'block') DOM_ELEMENTS.pastRunDetails.style.display = 'none';
             }
           }
         };
@@ -4057,7 +4104,7 @@ function displayPastRunDetails(runIndex) {
     function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFontSize, detailOffsetY, detailText) { let words = text.split(' '); let line = ''; let lines = []; let currentFontSize = baseFontSize; const MIN_FONT_SIZE = Math.max(8, detailFontSize - 1); function testLineWidth(testLineStr, fontStr) { const originalFont = ctxLocal.font; ctxLocal.font = fontStr; const width = ctxLocal.measureText(testLineStr).width; ctxLocal.font = originalFont; return width; } let attempt = 0; let fontString = `bold ${currentFontSize}px 'Inter', sans-serif`; while (testLineWidth(text, fontString) > maxWidth && currentFontSize > MIN_FONT_SIZE && attempt < 5) { currentFontSize -= 0.5; fontString = `bold ${currentFontSize}px 'Inter', sans-serif`; attempt++; } ctxLocal.font = fontString; if (ctxLocal.measureText(text).width <= maxWidth) { lines.push(text); } else { let splitPoint = -1; const camelCaseMatch = text.match(/[a-z][A-Z]/); if (camelCaseMatch && camelCaseMatch.index > 0) splitPoint = camelCaseMatch.index + 1; else if (text.includes("Growth")) splitPoint = text.indexOf("Growth"); else if (text.includes("Cooldown")) splitPoint = text.indexOf("Cooldown"); else if (text.includes("Reproduction")) splitPoint = text.indexOf("Reproduction"); else if (text.includes("Ratio")) splitPoint = text.indexOf("Ratio") > 0 ? text.indexOf("Ratio") : (text.indexOf("To") > 0 ? text.indexOf("To") : -1); if (splitPoint !== -1) { const l1 = text.substring(0, splitPoint); const l2 = text.substring(splitPoint); if (ctxLocal.measureText(l1).width <= maxWidth && ctxLocal.measureText(l2).width <= maxWidth) { lines.push(l1); lines.push(l2); } } if (lines.length === 0) { for (let n = 0; n < words.length; n++) { let testLineContent = line + words[n] + ' '; if (ctxLocal.measureText(testLineContent).width > maxWidth && n > 0) { lines.push(line.trim()); line = words[n] + ' '; } else line = testLineContent; } lines.push(line.trim()); } } lines = lines.map(l => { if (ctxLocal.measureText(l).width > maxWidth) { let truncated = l; while (ctxLocal.measureText(truncated + "...").width > maxWidth && truncated.length > 3) truncated = truncated.slice(0, -1); return truncated + "..."; } return l; }); if (lines.length > 2) lines = lines.slice(0, 2); const lineHeight = currentFontSize * 1.1; let startY = y - ((lines.length - 1) * lineHeight / 2) - (detailText ? detailFontSize / 3 : 0); ctxLocal.fillStyle = getComputedCssVar(CSS_VARS.TEXT_COLOR); ctxLocal.font = fontString; lines.forEach((l, i) => ctxLocal.fillText(l, x, startY + i * lineHeight)); if (detailText) { ctxLocal.font = `${detailFontSize}px 'Inter', sans-serif`; if (ctxLocal.measureText(detailText).width > maxWidth) { let truncatedDetail = detailText; while (ctxLocal.measureText(truncatedDetail + "...").width > maxWidth && truncatedDetail.length > 3) truncatedDetail = truncatedDetail.slice(0, -1); detailText = truncatedDetail + "..."; } ctxLocal.fillText(detailText, x, y + detailOffsetY); } }
     function drawBayesianNetworkVisualization() { if (!simBayesianNetwork || !bnVisualizationCanvas) return; const canvasEl = bnVisualizationCanvas, ctxLocal = bnVisualizationCtx; canvasEl.width = canvasEl.clientWidth; canvasEl.height = canvasEl.clientHeight; ctxLocal.clearRect(0, 0, canvasEl.width, canvasEl.height); ctxLocal.fillStyle = getComputedCssVar(CSS_VARS.BG_COLOR); ctxLocal.fillRect(0, 0, canvasEl.width, canvasEl.height); const nodes = simBayesianNetwork.nodes, sortedNodeNames = simBayesianNetwork.topologicalSort(); if (!sortedNodeNames) { console.error("BN: Could not perform topological sort for visualization."); return; } const nodePositions = {}; const layers = {}; const nodeDepths = {}; function getNodeDepth(nodeName) { if (nodeDepths[nodeName] !== undefined) return nodeDepths[nodeName]; const node = nodes.get(nodeName); if (!node) return -1; if (node.parents.length === 0) return nodeDepths[nodeName] = 0; let maxParentDepth = -1; for (const parent of node.parents) maxParentDepth = Math.max(maxParentDepth, getNodeDepth(parent.name)); return nodeDepths[nodeName] = maxParentDepth + 1; } sortedNodeNames.forEach(name => { const depth = getNodeDepth(name); if (!layers[depth]) layers[depth] = []; layers[depth].push(name); }); const PADDING_X = 30, PADDING_Y = 40, NODE_WIDTH_BASE = 120, NODE_WIDTH_MAX = 170, NODE_HEIGHT = 55, NODE_RADIUS = 8; const NODE_Y_SPACING_PER_LAYER_DEPTH = NODE_HEIGHT * 2.6; const MIN_NODE_SPACING_X_FACTOR = 1.2; const NAME_FONT_SIZE_BASE = 11, DETAIL_FONT_SIZE = 9; const DETAIL_Y_OFFSET_FROM_CENTER = NODE_HEIGHT / 2 - DETAIL_FONT_SIZE - 5; Object.keys(layers).map(Number).sort((a, b) => a - b).forEach(depth => { const layerNodes = layers[depth]; const numNodesInLayer = layerNodes.length; const dynamicNodeWidth = Math.max(NODE_WIDTH_BASE, Math.min(NODE_WIDTH_MAX, (canvasEl.width - PADDING_X * (numNodesInLayer + 1)) / numNodesInLayer)); const nodeSpacingX = dynamicNodeWidth * MIN_NODE_SPACING_X_FACTOR; let totalWidthForLayer = numNodesInLayer * dynamicNodeWidth + (numNodesInLayer > 1 ? (numNodesInLayer - 1) * (nodeSpacingX - dynamicNodeWidth) : 0); let startX = (canvasEl.width - totalWidthForLayer) / 2; if (startX < PADDING_X) startX = PADDING_X; layerNodes.forEach((nodeName, index) => { nodePositions[nodeName] = { x: startX + index * nodeSpacingX + dynamicNodeWidth / 2, y: PADDING_Y + depth * NODE_Y_SPACING_PER_LAYER_DEPTH + NODE_HEIGHT / 2, width: dynamicNodeWidth }; }); }); const edgeColor = getComputedCssVar(CSS_VARS.BN_EDGE_COLOR); const arrowheadColor = getComputedCssVar(CSS_VARS.BN_ARROWHEAD_COLOR); const nodeParamBg = getComputedCssVar(CSS_VARS.BN_NODE_PARAM_BG); const nodeOutcomeBg = getComputedCssVar(CSS_VARS.BN_NODE_OUTCOME_BG); const nodeBorderColor = getComputedCssVar(CSS_VARS.BN_NODE_BORDER); ctxLocal.lineWidth = 1.5; sortedNodeNames.forEach(nodeName => { const childData = nodePositions[nodeName], node = nodes.get(nodeName); if (!childData || !node) return; const childPos = { x: childData.x, y: childData.y }; node.parents.forEach(parent => { const parentData = nodePositions[parent.name]; if (!parentData) return; const parentPos = { x: parentData.x, y: parentData.y }; ctxLocal.strokeStyle = edgeColor; ctxLocal.beginPath(); ctxLocal.moveTo(parentPos.x, parentPos.y); ctxLocal.lineTo(childPos.x, childPos.y); ctxLocal.stroke(); const angle = Math.atan2(childPos.y - parentPos.y, childPos.x - parentPos.x), arrowSize = 8, nodeBoundaryOffset = NODE_HEIGHT / 2 + 3; ctxLocal.beginPath(); ctxLocal.moveTo(childPos.x - nodeBoundaryOffset * Math.cos(angle), childPos.y - nodeBoundaryOffset * Math.sin(angle)); ctxLocal.lineTo(childPos.x - nodeBoundaryOffset * Math.cos(angle) - arrowSize * Math.cos(angle - Math.PI / 6), childPos.y - nodeBoundaryOffset * Math.sin(angle) - arrowSize * Math.sin(angle - Math.PI / 6)); ctxLocal.lineTo(childPos.x - nodeBoundaryOffset * Math.cos(angle) - arrowSize * Math.cos(angle + Math.PI / 6), childPos.y - nodeBoundaryOffset * Math.sin(angle) - arrowSize * Math.sin(angle + Math.PI / 6)); ctxLocal.closePath(); ctxLocal.fillStyle = arrowheadColor; ctxLocal.fill(); }); }); ctxLocal.textAlign = 'center'; ctxLocal.textBaseline = 'middle'; Object.entries(nodePositions).forEach(([nodeName, nodeData]) => { const node = nodes.get(nodeName); if (!node) return; const pos = { x: nodeData.x, y: nodeData.y }, current_node_width = nodeData.width; const TEXT_MARGIN_X = 8; const maxTextWidth = current_node_width - TEXT_MARGIN_X * 2; ctxLocal.fillStyle = node.type === 'discrete' ? nodeOutcomeBg : nodeParamBg; ctxLocal.strokeStyle = nodeBorderColor; ctxLocal.lineWidth = 1.2; ctxLocal.beginPath(); if (typeof ctxLocal.roundRect === 'function') { ctxLocal.roundRect(pos.x - current_node_width / 2, pos.y - NODE_HEIGHT / 2, current_node_width, NODE_HEIGHT, NODE_RADIUS); } else { ctxLocal.rect(pos.x - current_node_width / 2, pos.y - NODE_HEIGHT / 2, current_node_width, NODE_HEIGHT); } ctxLocal.fill(); ctxLocal.stroke(); let detailText = ''; if (node.type === 'discrete' && node.states) detailText = `(${node.states.join(', ')})`; else if (node.type === 'continuous') { const pConf = allBnParamAndDerivedNodeConfigs.find(pc => pc.name === node.name); if (pConf && pConf.min !== undefined && pConf.max !== undefined) { let precision = 2; if (pConf.isTunable) { const paramDef = tunableParams.find(tp => tp.configKey === pConf.configKey); if (paramDef) precision = getPrecision(paramDef.step); } else { precision = (pConf.max - pConf.min) < 10 ? 2 : ((pConf.max - pConf.min) < 1 ? 3 : 1); if (pConf.step) precision = getPrecision(pConf.step); else if ((pConf.max - pConf.min) === 0) precision = 0; } detailText = `[${pConf.min.toFixed(precision)}-${pConf.max.toFixed(precision)}]`; } else if (node.min !== undefined && node.max !== undefined) detailText = `[${node.min.toFixed(2)}-${node.max.toFixed(2)}]`; } wrapAndDrawText(ctxLocal, nodeName, pos.x, pos.y, maxTextWidth, NAME_FONT_SIZE_BASE, DETAIL_FONT_SIZE, DETAIL_Y_OFFSET_FROM_CENTER, detailText); }); }
     function populateBNLegend() { const legendDiv = DOM_ELEMENTS.bnLegend; if (!legendDiv) return; legendDiv.innerHTML = ''; const nodeParamBg = getComputedCssVar(CSS_VARS.BN_NODE_PARAM_BG); const nodeOutcomeBg = getComputedCssVar(CSS_VARS.BN_NODE_OUTCOME_BG); const edgeColor = getComputedCssVar(CSS_VARS.BN_EDGE_COLOR); const arrowheadColor = getComputedCssVar(CSS_VARS.BN_ARROWHEAD_COLOR); legendDiv.appendChild(createLegendItem(nodeParamBg, "Parameter/Input Node")); legendDiv.appendChild(createLegendItem(nodeOutcomeBg, "Outcome/State Node")); const edgeLegendItem = document.createElement('div'); edgeLegendItem.className = 'legend-item'; edgeLegendItem.innerHTML = `<span class="legend-color-swatch" style="background-color: transparent; border:none; display:inline-flex; align-items:center; margin-right: 6px; position:relative; top:1px;"><svg width="12" height="12" viewBox="0 0 12 12" style="overflow:visible;"><line x1="0" y1="6" x2="12" y2="6" stroke="${edgeColor}" stroke-width="1.5"/><polygon points="11,6 7,4 7,8" fill="${arrowheadColor}"/></svg></span> Causal Influence`; legendDiv.appendChild(edgeLegendItem); }
-    function exportRunsData() { const dataToExport = { version: SIM_DATA_VERSION, initialConfigSnapshot, completedRuns }; const jsonData = JSON.stringify(dataToExport, null, 2); const blob = new Blob([jsonData], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); const date = new Date(); const dateString = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`; a.download = `ecosystem_runs_data_${dateString}.json`; a.href = url; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); console.log("Exported runs data."); }
+        'fpsDisplay', 'bnAccuracyDisplay', 'bnCvAccuracyDisplay', 'plantCount', 'preyCount', 'predatorCount', 'totalEntities',
     function importRunsData(event) {
       const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (e) => {
         try {
@@ -4142,6 +4189,8 @@ function displayPastRunDetails(runIndex) {
         const y = padding.top + (chartHeight / numYGridLines) * i;
         graphCtxLocal.beginPath();
         graphCtxLocal.moveTo(padding.left, y);
+      bnCrossValidationError = crossValidateBN();
+      updateBnCvAccuracyDisplay();
         graphCtxLocal.lineTo(padding.left + chartWidth, y);
         graphCtxLocal.stroke();
         let labelValue = maxVal * (1 - i / numYGridLines);
