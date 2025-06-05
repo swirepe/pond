@@ -4078,7 +4078,8 @@ function displayPastRunDetails(runIndex) {
           if (cumulativeGraphCanvas.clientHeight > 0) cumulativeGraphCanvas.height = cumulativeGraphCanvas.clientHeight;
           if (bnPredictionGraphCanvas && bnPredictionGraphCanvas.clientWidth > 0) bnPredictionGraphCanvas.width = bnPredictionGraphCanvas.clientWidth;
           if (bnPredictionGraphCanvas && bnPredictionGraphCanvas.clientHeight > 0) bnPredictionGraphCanvas.height = bnPredictionGraphCanvas.clientHeight;
-          drawPopulationGraph(); drawCumulativeGraph(); drawBNPredictionGraph();
+          drawPopulationGraph();
+          drawCumulativeGraph();
           if (bnPredictionGraphCanvas) drawBNPredictionGraph();
         }
       } else { // If past runs view is active
