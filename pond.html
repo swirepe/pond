@@ -27,21 +27,21 @@
       --graph-grid-color: hsl(var(--base-hue), 15%, 25%);
 
       /* Colors for interval death statistics on population graph */
-      --graph-prey-pred-death-color: hsl(calc(var(--base-hue) - 30), 70%, 55%);
-      --graph-prey-starv-death-color: hsl(calc(var(--base-hue) + 45), 40%, 45%);
-      --graph-pred-starv-death-color: hsl(calc(var(--base-hue) - 15), 35%, 45%);
-      --graph-pred-mob-death-color: hsl(0, 70%, 50%);
+      --graph-prey-pred-death-color: hsl(calc(var(--base-hue) + 60), 55%, 40%);
+      --graph-prey-starv-death-color: hsl(calc(var(--base-hue) + 60), 55%, 35%);
+      --graph-pred-starv-death-color: hsl(var(--base-hue), 55%, 40%);
+      --graph-pred-mob-death-color: hsl(var(--base-hue), 65%, 45%);
 
       /* Colors for cumulative graph */
-      --graph-plant-birth-color: hsl(calc(var(--base-hue) + 135), 70%, 55%);
+      --graph-plant-birth-color: hsl(calc(var(--base-hue) + 120), 70%, 60%);
       /* Greenish-cyan for plant births */
-      --graph-plants-consumed-color: hsl(calc(var(--base-hue) - 60), 50%, 55%);
+      --graph-plants-consumed-color: hsl(calc(var(--base-hue) - 60), 55%, 60%);
       /* Orange/brownish for plants consumed */
-      --graph-prey-birth-color: hsl(calc(var(--base-hue) + 75), 80%, 65%);
-      --graph-predator-birth-color: hsl(calc(var(--base-hue) + 15), 80%, 70%);
-      --graph-total-prey-death-color: hsl(calc(var(--base-hue) - 45), 60%, 50%);
+      --graph-prey-birth-color: hsl(calc(var(--base-hue) + 60), 80%, 70%);
+      --graph-predator-birth-color: hsl(var(--base-hue), 80%, 70%);
+      --graph-total-prey-death-color: hsl(calc(var(--base-hue) + 60), 60%, 45%);
       /* A general death color for prey */
-      --graph-total-predator-death-color: hsl(0, 60%, 50%);
+      --graph-total-predator-death-color: hsl(var(--base-hue), 60%, 45%);
       /* A general death color for predators */
       --graph-bn-error-color: hsl(calc(var(--base-hue) + 180), 80%, 70%);
 
@@ -442,6 +442,11 @@
       font-size: 0.8em;
       color: var(--text-color);
       opacity: 0.9;
+      cursor: pointer;
+    }
+
+    .legend-item.disabled {
+      opacity: 0.3;
     }
 
     .legend-color-swatch {
@@ -451,6 +456,19 @@
       border: 1px solid hsl(var(--base-hue), 15%, 45%);
       display: inline-block;
       border-radius: 2px;
+    }
+
+    .graph-tooltip {
+      position: absolute;
+      z-index: 1002;
+      pointer-events: none;
+      font-size: 0.75em;
+      background-color: var(--ui-bg-color-solid);
+      color: var(--text-color);
+      border: 1px solid var(--ui-border-color);
+      padding: 2px 4px;
+      border-radius: 3px;
+      white-space: nowrap;
     }
 
     #bayesianNetworkVisualizationCanvas {
@@ -628,13 +646,9 @@
         <canvas id="bnPredictionGraphCanvas"></canvas>
         <div id="bnPredictionGraphLegend" class="graph-legend"></div>
       </div>
-      <div class="stat-subsection">
-        <h3>BN Prediction Error Per Run</h3>
-        <canvas id="bnPredictionErrorGraphCanvas"></canvas>
-        <div id="bnPredictionErrorGraphLegend" class="graph-legend"></div>
-      </div>
     </div>
   </div>
+  <div id="graphTooltip" class="graph-tooltip" style="display:none;"></div>
 
   <button id="controlsToggle" class="overlay-toggle">Controls</button>
   <div id="controlsOverlay" class="overlay">
@@ -855,6 +869,7 @@
     let bnPredictionErrorGraphCanvas, bnPredictionErrorGraphCtx;
     let pastBNPredictionGraphCanvas, pastBNPredictionGraphCtx;
     let simulationViewContainer, pastRunsViewContainer, bnVisualizationContainer;
+    let graphTooltip;
 
     let currentRunNumber = 1;
     let completedRuns = [];
@@ -3412,23 +3427,34 @@ function populatePastRunsSummaryList() {
     });
 }
 
-function createLegendItem(color, label) {
+function createLegendItem(historyObj, onToggle) {
     const item = document.createElement('div');
     item.className = 'legend-item';
     const swatch = document.createElement('span');
     swatch.className = 'legend-color-swatch';
-    swatch.style.backgroundColor = color;
+    swatch.style.backgroundColor = historyObj.color;
     item.appendChild(swatch);
-    item.appendChild(document.createTextNode(label));
+    item.appendChild(document.createTextNode(historyObj.label));
+    if (onToggle) {
+        item.addEventListener('click', () => {
+            historyObj.visible = historyObj.visible === false ? true : false;
+            if (historyObj.visible) item.classList.remove('disabled');
+            else item.classList.add('disabled');
+            onToggle();
+        });
+    }
     return item;
 }
 
-function populateGraphLegend(legendDivId, historiesWithLabels) {
+function populateGraphLegend(legendDivId, historiesWithLabels, onToggle) {
     const legendDiv = DOM_ELEMENTS[legendDivId];
     if (!legendDiv) return;
     legendDiv.innerHTML = '';
     historiesWithLabels.forEach(item => {
-        legendDiv.appendChild(createLegendItem(item.color, item.label));
+        legendDiv.appendChild(createLegendItem(item, onToggle));
+        if (item.visible === false) {
+            legendDiv.lastChild.classList.add('disabled');
+        }
     });
 }
 
@@ -3871,32 +3897,32 @@ function displayPastRunDetails(runIndex) {
 
     function drawPopulationGraph() {
       const histories = [
-        { data: populationHistory.plants, color: getComputedCssVar(CSS_VARS.PLANT_COLOR), lineWidth: 2, label: "Plants" },
-        { data: populationHistory.prey, color: getComputedCssVar(CSS_VARS.PREY_COLOR), lineWidth: 2, label: "Prey" },
-        { data: populationHistory.predators, color: getComputedCssVar(CSS_VARS.PREDATOR_COLOR), lineWidth: 2, label: "Predators" },
-        { data: populationHistory.preyPredationDeaths, color: getComputedCssVar(CSS_VARS.GRAPH_PREY_PRED_DEATH_COLOR), lineWidth: 1.5, label: "Prey (PredD)" },
-        { data: populationHistory.preyStarvationDeaths, color: getComputedCssVar(CSS_VARS.GRAPH_PREY_STARV_DEATH_COLOR), lineWidth: 1.5, label: "Prey (StarvD)" },
-        { data: populationHistory.predatorStarvationDeaths, color: getComputedCssVar(CSS_VARS.GRAPH_PRED_STARV_DEATH_COLOR), lineWidth: 1.5, label: "Pred (StarvD)" },
-        { data: populationHistory.predatorMobbingDeaths, color: getComputedCssVar(CSS_VARS.GRAPH_PRED_MOB_DEATH_COLOR), lineWidth: 1.5, label: "Pred (MobD)" }
+        { data: populationHistory.plants, color: getComputedCssVar(CSS_VARS.PLANT_COLOR), lineWidth: 2, label: "Plants", visible: true },
+        { data: populationHistory.prey, color: getComputedCssVar(CSS_VARS.PREY_COLOR), lineWidth: 2, label: "Prey", visible: true },
+        { data: populationHistory.predators, color: getComputedCssVar(CSS_VARS.PREDATOR_COLOR), lineWidth: 2, label: "Predators", visible: true },
+        { data: populationHistory.preyPredationDeaths, color: getComputedCssVar(CSS_VARS.GRAPH_PREY_PRED_DEATH_COLOR), lineWidth: 1.5, label: "Prey (PredD)", visible: true },
+        { data: populationHistory.preyStarvationDeaths, color: getComputedCssVar(CSS_VARS.GRAPH_PREY_STARV_DEATH_COLOR), lineWidth: 1.5, label: "Prey (StarvD)", visible: true },
+        { data: populationHistory.predatorStarvationDeaths, color: getComputedCssVar(CSS_VARS.GRAPH_PRED_STARV_DEATH_COLOR), lineWidth: 1.5, label: "Pred (StarvD)", visible: true },
+        { data: populationHistory.predatorMobbingDeaths, color: getComputedCssVar(CSS_VARS.GRAPH_PRED_MOB_DEATH_COLOR), lineWidth: 1.5, label: "Pred (MobD)", visible: true }
       ];
       drawGenericGraph(populationGraphCtx, populationGraphCanvas, histories, populationHistory.maxLength);
       if (DOM_ELEMENTS.currentPopulationGraphLegend) {
-        populateGraphLegend('currentPopulationGraphLegend', histories);
+        populateGraphLegend('currentPopulationGraphLegend', histories, drawPopulationGraph);
       }
     }
 
     function drawCumulativeGraph() {
       const histories = [
-        { data: cumulativeHistory.plantBirths, color: getComputedCssVar(CSS_VARS.GRAPH_PLANT_BIRTH_COLOR), lineWidth: 2, label: "Plant Births" },
-        { data: cumulativeHistory.plantsConsumed, color: getComputedCssVar(CSS_VARS.GRAPH_PLANTS_CONSUMED_COLOR), lineWidth: 2, label: "Plants Consumed" },
-        { data: cumulativeHistory.preyBirths, color: getComputedCssVar(CSS_VARS.GRAPH_PREY_BIRTH_COLOR), lineWidth: 2, label: "Prey Births" },
-        { data: cumulativeHistory.predatorBirths, color: getComputedCssVar(CSS_VARS.GRAPH_PREDATOR_BIRTH_COLOR), lineWidth: 2, label: "Predator Births" },
-        { data: cumulativeHistory.totalPreyDeaths, color: getComputedCssVar(CSS_VARS.GRAPH_TOTAL_PREY_DEATH_COLOR), lineWidth: 2, label: "Total Prey Deaths" },
-        { data: cumulativeHistory.totalPredatorDeaths, color: getComputedCssVar(CSS_VARS.GRAPH_TOTAL_PREDATOR_DEATH_COLOR), lineWidth: 2, label: "Total Predator Deaths" }
+        { data: cumulativeHistory.plantBirths, color: getComputedCssVar(CSS_VARS.GRAPH_PLANT_BIRTH_COLOR), lineWidth: 2, label: "Plant Births", visible: true },
+        { data: cumulativeHistory.plantsConsumed, color: getComputedCssVar(CSS_VARS.GRAPH_PLANTS_CONSUMED_COLOR), lineWidth: 2, label: "Plants Consumed", visible: true },
+        { data: cumulativeHistory.preyBirths, color: getComputedCssVar(CSS_VARS.GRAPH_PREY_BIRTH_COLOR), lineWidth: 2, label: "Prey Births", visible: true },
+        { data: cumulativeHistory.predatorBirths, color: getComputedCssVar(CSS_VARS.GRAPH_PREDATOR_BIRTH_COLOR), lineWidth: 2, label: "Predator Births", visible: true },
+        { data: cumulativeHistory.totalPreyDeaths, color: getComputedCssVar(CSS_VARS.GRAPH_TOTAL_PREY_DEATH_COLOR), lineWidth: 2, label: "Total Prey Deaths", visible: true },
+        { data: cumulativeHistory.totalPredatorDeaths, color: getComputedCssVar(CSS_VARS.GRAPH_TOTAL_PREDATOR_DEATH_COLOR), lineWidth: 2, label: "Total Predator Deaths", visible: true }
       ];
-      drawGenericGraph(cumulativeGraphCtx, cumulativeGraphCanvas, histories, cumulativeHistory.maxLength);
+      drawGenericGraph(cumulativeGraphCtx, cumulativeGraphCanvas, histories, cumulativeHistory.maxLength, null, false, true, true);
       if (DOM_ELEMENTS.currentCumulativeGraphLegend) {
-        populateGraphLegend('currentCumulativeGraphLegend', histories);
+        populateGraphLegend('currentCumulativeGraphLegend', histories, drawCumulativeGraph);
       }
     }
 
@@ -4054,18 +4080,18 @@ function displayPastRunDetails(runIndex) {
     function drawBNPredictionGraph() {
       const yMax = 1.05; // Probabilities are 0-1, give a little padding
       const histories = [
-        { data: bnPredictionHistory.preyExtinctionProb, color: getComputedCssVar(CSS_VARS.PREY_COLOR), lineWidth: 1.5, label: "P(Prey Extinct)" },
-        { data: bnPredictionHistory.predatorExtinctionProb, color: getComputedCssVar(CSS_VARS.PREDATOR_COLOR), lineWidth: 1.5, label: "P(Pred Extinct)" },
-        { data: bnPredictionHistory.favorableGrowthPreyProb, color: modifyHslColor(getComputedCssVar(CSS_VARS.PREY_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Prey Growth)" }, // Lighter prey color
-        { data: bnPredictionHistory.favorableGrowthPredatorProb, color: modifyHslColor(getComputedCssVar(CSS_VARS.PREDATOR_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Pred Growth)" } // Lighter pred color
+        { data: bnPredictionHistory.preyExtinctionProb, color: getComputedCssVar(CSS_VARS.PREY_COLOR), lineWidth: 1.5, label: "P(Prey Extinct)", visible: true },
+        { data: bnPredictionHistory.predatorExtinctionProb, color: getComputedCssVar(CSS_VARS.PREDATOR_COLOR), lineWidth: 1.5, label: "P(Pred Extinct)", visible: true },
+        { data: bnPredictionHistory.favorableGrowthPreyProb, color: modifyHslColor(getComputedCssVar(CSS_VARS.PREY_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Prey Growth)", visible: true },
+        { data: bnPredictionHistory.favorableGrowthPredatorProb, color: modifyHslColor(getComputedCssVar(CSS_VARS.PREDATOR_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Pred Growth)", visible: true } // Lighter pred color
       ];
 
-      // Use a slightly modified generic graph drawing function for probabilities 0-1
-      drawGenericGraph(bnPredictionGraphCtx, bnPredictionGraphCanvas, histories, bnPredictionHistory.maxLength, yMax, true); // Pass true for fixed Y scale 0-1
+        // Use a slightly modified generic graph drawing function for probabilities 0-1
+        drawGenericGraph(bnPredictionGraphCtx, bnPredictionGraphCanvas, histories, bnPredictionHistory.maxLength, yMax, true);
 
-      if (DOM_ELEMENTS.bnPredictionGraphLegend) {
-        populateGraphLegend('bnPredictionGraphLegend', histories);
-      }
+        if (DOM_ELEMENTS.bnPredictionGraphLegend) {
+          populateGraphLegend('bnPredictionGraphLegend', histories, drawBNPredictionGraph);
+        }
     }
 
     function drawBNPredictionErrorGraph() {
@@ -4080,7 +4106,7 @@ function displayPastRunDetails(runIndex) {
     }
 
     // Modify drawGenericGraph to accept optional fixed yMax and y-axis scaling for probabilities
-    function drawGenericGraph(graphCtxLocal, canvasLocal, histories, maxLength, fixedYMax = null, scaleYForProbability = false) {
+    function drawGenericGraph(graphCtxLocal, canvasLocal, histories, maxLength, fixedYMax = null, scaleYForProbability = false, areaMode = false, stackedArea = false) {
       if (!canvasLocal || canvasLocal.width === 0 || canvasLocal.height === 0) return;
 
       const bgColor = getComputedCssVar(CSS_VARS.BG_COLOR);
@@ -4093,8 +4119,17 @@ function displayPastRunDetails(runIndex) {
       let maxVal;
       if (fixedYMax !== null) {
         maxVal = fixedYMax;
+      } else if (areaMode && stackedArea) {
+        maxVal = 10;
+        for (let i = 0; i < maxLength; i++) {
+          let sum = 0;
+          histories.forEach(h => { if (h.data && h.data[i] !== undefined && h.visible !== false) sum += h.data[i]; });
+          if (sum > maxVal) maxVal = sum;
+        }
+        maxVal = Math.ceil(maxVal / 10) * 10;
+        if (maxVal === 0) maxVal = 10;
       } else {
-        maxVal = 10; // Default starting maxVal
+        maxVal = 10;
         histories.forEach(h => { if (h.data) h.data.forEach(val => { if (val > maxVal) maxVal = val; }) });
         maxVal = Math.ceil(maxVal / 10) * 10;
         if (maxVal === 0) maxVal = 10;
@@ -4146,20 +4181,70 @@ function displayPastRunDetails(runIndex) {
         }
       }
 
+
       const xStep = chartWidth / Math.max(1, maxLength - 1);
-      histories.forEach(h => {
-        if (!h.data || h.data.length < 2) return;
-        graphCtxLocal.beginPath();
-        graphCtxLocal.strokeStyle = h.color;
-        graphCtxLocal.lineWidth = h.lineWidth || 2;
-        h.data.forEach((val, index) => {
-          const x = padding.left + index * xStep;
-          const y = padding.top + chartHeight - (Math.min(val, maxVal) / maxVal) * chartHeight; // Clamp val to maxVal for drawing
-          if (index === 0) graphCtxLocal.moveTo(x, y);
-          else graphCtxLocal.lineTo(x, y);
+
+      if (areaMode) {
+        const baseline = new Array(maxLength).fill(0);
+        histories.forEach(h => {
+          if (!h.data || h.data.length < 2 || h.visible === false) return;
+          graphCtxLocal.beginPath();
+          h.data.forEach((val, index) => {
+            const x = padding.left + index * xStep;
+            const yBase = padding.top + chartHeight - (baseline[index] / maxVal) * chartHeight;
+            if (index === 0) graphCtxLocal.moveTo(x, yBase);
+            else graphCtxLocal.lineTo(x, yBase);
+          });
+          for (let i = h.data.length - 1; i >= 0; i--) {
+            const x = padding.left + i * xStep;
+            const yTop = padding.top + chartHeight - ((baseline[i] + h.data[i]) / maxVal) * chartHeight;
+            graphCtxLocal.lineTo(x, yTop);
+          }
+          graphCtxLocal.closePath();
+          graphCtxLocal.fillStyle = h.color;
+          graphCtxLocal.fill();
+          for (let i = 0; i < h.data.length; i++) baseline[i] += h.data[i];
         });
-        graphCtxLocal.stroke();
-      });
+      } else {
+        histories.forEach(h => {
+          if (!h.data || h.data.length < 2 || h.visible === false) return;
+          graphCtxLocal.beginPath();
+          graphCtxLocal.strokeStyle = h.color;
+          graphCtxLocal.lineWidth = h.lineWidth || 2;
+          h.data.forEach((val, index) => {
+            const x = padding.left + index * xStep;
+            const y = padding.top + chartHeight - (Math.min(val, maxVal) / maxVal) * chartHeight;
+            if (index === 0) graphCtxLocal.moveTo(x, y);
+            else graphCtxLocal.lineTo(x, y);
+          });
+          graphCtxLocal.stroke();
+        });
+      }
+
+      canvasLocal._graphInfo = { histories, maxLength, xStep, padding, chartHeight, maxVal };
+      if (!canvasLocal._tooltipHandlersAdded) {
+        canvasLocal.addEventListener('mousemove', function(evt) {
+          if (!graphTooltip) return;
+          const info = canvasLocal._graphInfo;
+          if (!info) return;
+          const rect = canvasLocal.getBoundingClientRect();
+          const relX = evt.clientX - rect.left - info.padding.left;
+          const index = Math.round(relX / info.xStep);
+          if (index < 0 || index >= info.maxLength) { graphTooltip.style.display = 'none'; return; }
+          let html = `t=${index * historyUpdateInterval}`;
+          info.histories.forEach(h => {
+            if (h.visible === false) return;
+            const val = h.data[index];
+            if (val !== undefined) html += `<br>${h.label}: ${val}`;
+          });
+          graphTooltip.innerHTML = html;
+          graphTooltip.style.left = `${evt.clientX + 10}px`;
+          graphTooltip.style.top = `${evt.clientY + 10}px`;
+          graphTooltip.style.display = 'block';
+        });
+        canvasLocal.addEventListener('mouseleave', () => { if (graphTooltip) graphTooltip.style.display = 'none'; });
+        canvasLocal._tooltipHandlersAdded = true;
+      }
     }
 
     function cacheDOMElements() {
@@ -4191,6 +4276,7 @@ function displayPastRunDetails(runIndex) {
         'bnPredictionGraphCanvas', 'bnPredictionGraphLegend',
         'bnPredictionErrorGraphCanvas', 'bnPredictionErrorGraphLegend',
         'pastBNPredictionGraphCanvas', 'pastBNPredictionGraphLegend',
+        'graphTooltip',
         // Add new elements
       ];
       tunableParams.forEach(param => { ids.push(param.id); ids.push(param.id + "Value"); });
@@ -4214,6 +4300,7 @@ function displayPastRunDetails(runIndex) {
       simulationViewContainer = DOM_ELEMENTS.simulationViewContainer;
       pastRunsViewContainer = DOM_ELEMENTS.pastRunsViewContainer;
       bnVisualizationContainer = DOM_ELEMENTS.bayesianNetworkVisualizationContainer;
+      graphTooltip = DOM_ELEMENTS.graphTooltip;
     }
 
     function init() {
