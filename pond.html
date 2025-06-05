@@ -568,6 +568,7 @@
     <div id="statsOverlay" class="overlay">
       <h2>Statistics</h2>
       <div>FPS: <span id="fpsDisplay">--</span></div>
+      <div>BN Acc (last 20): <span id="bnAccuracyDisplay">--</span></div>
       <div class="stat-subsection">
         <h3>Populations & Interval Deaths</h3>
         <div>Plants: <span id="plantCount">0</span></div>
@@ -912,6 +913,13 @@
       autoPilotStats.bestScoreEver = -Infinity;
       autoPilotStats.stagnationCounter = 0;
       autoPilotStats.lastScore = 0;
+    }
+
+    const BN_ERROR_HISTORY_LENGTH = 20;
+    let bnPredictionErrors = [];
+    function getBnErrorAverage() {
+      if (bnPredictionErrors.length === 0) return 0.5;
+      return bnPredictionErrors.reduce((a, b) => a + b, 0) / bnPredictionErrors.length;
     }
 
     let simBayesianNetwork = null;
@@ -1693,6 +1701,39 @@
       for (const state of node.states) {
         node.cpt[key][state] = (cptCounters[key][state] || BN_LAPLACE_SMOOTHING) / totalForKeyWithSmoothing;
       }
+    }
+
+    function computeBNPredictionError(runData) {
+      const preds = runData.statistics.bnPredictionsAtRunStart;
+      if (!preds) return null;
+      const stats = runData.statistics;
+      const params = runData.parameters;
+      const duration = runData.durationFrames > 0 ? runData.durationFrames : 1;
+
+      const actualExtPrey = (stats.deathFrames.prey !== null && params.initialPrey > 0) ? 1 : 0;
+      const actualExtPred = (stats.deathFrames.predator !== null && params.initialPredators > 0) ? 1 : 0;
+      const actualGrowthPlant = (stats.totalPlantBirths / duration) > (stats.totalPlantsConsumed / duration) ? 1 : 0;
+      const actualGrowthPrey = (stats.totalPreyBirths / duration) > ((stats.totalPreyDeathsByPredation + stats.totalPreyDeathsByStarvation) / duration) ? 1 : 0;
+      const actualGrowthPred = (stats.totalPredatorBirths / duration) > ((stats.totalPredatorDeathsByStarvation + stats.totalPredatorDeathsByMobbing) / duration) ? 1 : 0;
+
+      const errors = [];
+      if (preds.extinction && preds.extinction.prey !== undefined && params.initialPrey > 0) {
+        errors.push(Math.pow(preds.extinction.prey - actualExtPrey, 2));
+      }
+      if (preds.extinction && preds.extinction.predator !== undefined && params.initialPredators > 0) {
+        errors.push(Math.pow(preds.extinction.predator - actualExtPred, 2));
+      }
+      if (preds.growth && preds.growth.plant !== undefined && params.initialPlants > 0) {
+        errors.push(Math.pow(preds.growth.plant - actualGrowthPlant, 2));
+      }
+      if (preds.growth && preds.growth.prey !== undefined && params.initialPrey > 0) {
+        errors.push(Math.pow(preds.growth.prey - actualGrowthPrey, 2));
+      }
+      if (preds.growth && preds.growth.predator !== undefined && params.initialPredators > 0) {
+        errors.push(Math.pow(preds.growth.predator - actualGrowthPred, 2));
+      }
+      if (errors.length === 0) return null;
+      return errors.reduce((a, b) => a + b, 0) / errors.length;
     }
 
     // Predicts extinction probabilities for given candidate parameters
@@ -2681,6 +2722,7 @@ function updateCurrentBNPredictionsDisplay() {
           drawCumulativeGraph();
           updateRunStartBNPredictionsDisplay();
           updateCurrentBNPredictionsDisplay();
+          updateBnAccuracyDisplay();
         }
       });
       DOM_ELEMENTS.controlsToggle.addEventListener('click', () => { DOM_ELEMENTS.controlsOverlay.classList.toggle('visible'); });
@@ -2802,6 +2844,7 @@ function updateCurrentBNPredictionsDisplay() {
       resetSimulation(); // Resets entities, populations, and history arrays
       updateRunStartBNPredictionsDisplay(); // Show BN predictions for this run
       updateCurrentBNPredictionsDisplay(); // Update BN display for the *new* current parameters
+      updateBnAccuracyDisplay();
 
       DOM_ELEMENTS.currentRunInfo.classList.add('visible');
       lastTimestamp = performance.now(); // Reset for game loop delta time
@@ -3055,7 +3098,8 @@ function updateCurrentBNPredictionsDisplay() {
 
       const GP_MEAN_WEIGHT = 0.40;
       const UCB_BONUS_WEIGHT = 0.20;
-      const BN_SCORE_WEIGHT = 0.40;
+      const BN_SCORE_WEIGHT_BASE = 0.40;
+      const BN_SCORE_WEIGHT = BN_SCORE_WEIGHT_BASE * Math.max(0, 1 - getBnErrorAverage());
 
       candidates.forEach(c => {
         let gpMean = 0;
@@ -3123,7 +3167,7 @@ function updateCurrentBNPredictionsDisplay() {
         starvationRisk: isBNReady() ? predictStarvationRiskProbabilities(bestCandidate.params) : { prey: 0.5, predator: 0.5, error: "BN not ready" },
       };
 
-      console.log(`Autopilot selected (Source: ${bestCandidate.source}). Top Score: ${bestCandidate.score.toFixed(0)}. Stagnation: ${autoPilotStats.stagnationCounter}, Exploration: ${explorationFactor.toFixed(2)}, Kappa: ${KAPPA_UCB.toFixed(2)}`);
+      console.log(`Autopilot selected (Source: ${bestCandidate.source}). Top Score: ${bestCandidate.score.toFixed(0)}. BN Weight: ${BN_SCORE_WEIGHT.toFixed(2)}. Stagnation: ${autoPilotStats.stagnationCounter}, Exploration: ${explorationFactor.toFixed(2)}, Kappa: ${KAPPA_UCB.toFixed(2)}`);
       console.log(`  GP Pred: Mean=${bestCandidate.debug_gp_mean.toFixed(0)}, Var=${bestCandidate.debug_gp_variance.toFixed(3)}. BN Comp: ${bestCandidate.debug_bn_component.toFixed(0)}`);
       if (bnPredictionsForNextRun.extinction && bnPredictionsForNextRun.growth && bnPredictionsForNextRun.starvationRisk) {
         console.log(`  BN Preds for chosen: ExtP:${bnPredictionsForNextRun.extinction.prey?.toFixed(3)} ExtR:${bnPredictionsForNextRun.extinction.predator?.toFixed(3)} | GrowPl:${bnPredictionsForNextRun.growth.plant?.toFixed(3)} GrowP:${bnPredictionsForNextRun.growth.prey?.toFixed(3)} GrowR:${bnPredictionsForNextRun.growth.predator?.toFixed(3)} | StarvP:${bnPredictionsForNextRun.starvationRisk.prey?.toFixed(3)} StarvR:${bnPredictionsForNextRun.starvationRisk.predator?.toFixed(3)}`);
@@ -3176,6 +3220,14 @@ function updateCurrentBNPredictionsDisplay() {
       };
       completedRuns.push(runData);
 
+      const brier = computeBNPredictionError(runData);
+      if (brier !== null) {
+        bnPredictionErrors.push(brier);
+        if (bnPredictionErrors.length > BN_ERROR_HISTORY_LENGTH) bnPredictionErrors.shift();
+        runData.statistics.bnPredictionBrierScore = brier;
+        updateBnAccuracyDisplay();
+      }
+
       if (gpOptimizer && runData.durationFrames > 30) {
         const scoreForGP = calculateAutoPilotScore(runData);
         gpOptimizer.addObservation(runData.parameters, scoreForGP);
@@ -3218,6 +3270,12 @@ function updateCurrentBNPredictionsDisplay() {
       DOM_ELEMENTS.bnRunStartPredatorGrowthPrediction.textContent = grow && !grow.error ? grow.predator.toFixed(3) : 'N/A';
       DOM_ELEMENTS.bnRunStartPreyStarvationRiskPrediction.textContent = starv && !starv.error ? starv.prey.toFixed(3) : 'N/A';
       DOM_ELEMENTS.bnRunStartPredStarvationRiskPrediction.textContent = starv && !starv.error ? starv.predator.toFixed(3) : 'N/A';
+    }
+
+    function updateBnAccuracyDisplay() {
+      if (!DOM_ELEMENTS.bnAccuracyDisplay) return;
+      const avgErr = getBnErrorAverage();
+      DOM_ELEMENTS.bnAccuracyDisplay.textContent = isNaN(avgErr) ? 'N/A' : (1 - avgErr).toFixed(3);
     }
 
 function populatePastRunsSummaryList() {
@@ -4001,7 +4059,7 @@ function displayPastRunDetails(runIndex) {
         'pastPopulationGraphCanvas', 'pastCumulativeGraphCanvas', 'bayesianNetworkVisualizationCanvas',
         'simulationViewContainer', 'pastRunsViewContainer', 'bayesianNetworkVisualizationContainer',
         'pageHeader', 'pageSubheader', 'statsToggle', 'statsOverlay', 'controlsToggle', 'controlsOverlay',
-        'fpsDisplay', 'plantCount', 'preyCount', 'predatorCount', 'totalEntities',
+        'fpsDisplay', 'bnAccuracyDisplay', 'plantCount', 'preyCount', 'predatorCount', 'totalEntities',
         'plantBirthsDisplay', 'plantsConsumedDisplay', 'preyBirthsDisplay', 'predatorBirthsDisplay',
         'totalPreyDeathsDisplay', 'totalPredatorDeathsDisplay',
         'preyPredationDeathsDisplay', 'preyStarvationDeathsDisplay',
@@ -4085,6 +4143,7 @@ function displayPastRunDetails(runIndex) {
       bnPredictionsForNextRun = { extinction: bnExtPreds, growth: bnGrowthPreds, starvationRisk: bnStarvPreds };
       updateRunStartBNPredictionsDisplay();
       updateCurrentBNPredictionsDisplay(); // Show these predictions
+      updateBnAccuracyDisplay();
 
       // Start the first run with the initial (potentially URL-modified) config
       startNewRun(currentEffectiveConfig);
