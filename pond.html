@@ -51,6 +51,13 @@
       --bn-node-border: hsl(var(--base-hue), 15%, 45%);
       --bn-edge-color: hsl(var(--base-hue), 15%, 55%);
       --bn-arrowhead-color: hsl(var(--base-hue), 15%, 75%);
+      --bn-edge-color-positive: hsl(120, 50%, 55%);
+      --bn-edge-color-negative: hsl(0, 60%, 60%);
+      --bn-group-plant: hsl(calc(var(--base-hue) + 135), 40%, 35%);
+      --bn-group-prey: hsl(calc(var(--base-hue) + 75), 45%, 40%);
+      --bn-group-predator: hsl(calc(var(--base-hue) - 20), 50%, 40%);
+      --bn-group-derived: hsl(var(--base-hue), 30%, 35%);
+      --bn-group-outcome: hsl(calc(var(--base-hue) - 40), 55%, 35%);
     }
 
     body {
@@ -809,10 +816,14 @@
 
     <div id="bayesianNetworkVisualizationContainer" class="mt-8" style="display:none;">
       <h3 class="text-xl font-semibold mb-4 text-center">Bayesian Network Structure</h3>
-      <canvas id="bayesianNetworkVisualizationCanvas"></canvas>
-      <div id="bnLegend" class="graph-legend mt-3 text-xs">
-        <!-- Legend items will be injected here by JS -->
-      </div>
+        <canvas id="bayesianNetworkVisualizationCanvas"></canvas>
+        <div class="mt-2 text-center">
+          <button id="exportBNPngButton" class="btn" style="max-width:150px;display:inline-block;margin-right:4px;">Export PNG</button>
+          <button id="exportBNSvgButton" class="btn" style="max-width:150px;display:inline-block;">Export SVG</button>
+        </div>
+        <div id="bnLegend" class="graph-legend mt-3 text-xs">
+          <!-- Legend items will be injected here by JS -->
+        </div>
     </div>
 
   </div>
@@ -841,6 +852,11 @@
       BN_NODE_PARAM_BG: '--bn-node-param-bg', BN_NODE_OUTCOME_BG: '--bn-node-outcome-bg',
       BN_NODE_BORDER: '--bn-node-border', BN_EDGE_COLOR: '--bn-edge-color',
       BN_ARROWHEAD_COLOR: '--bn-arrowhead-color',
+      BN_EDGE_COLOR_POSITIVE: '--bn-edge-color-positive',
+      BN_EDGE_COLOR_NEGATIVE: '--bn-edge-color-negative',
+      BN_GROUP_PLANT: '--bn-group-plant', BN_GROUP_PREY: '--bn-group-prey',
+      BN_GROUP_PREDATOR: '--bn-group-predator', BN_GROUP_DERIVED: '--bn-group-derived',
+      BN_GROUP_OUTCOME: '--bn-group-outcome',
     };
 
     const BN_NODE_NAMES = {
@@ -868,8 +884,19 @@
     let bnPredictionGraphCanvas, bnPredictionGraphCtx;
     let bnPredictionErrorGraphCanvas, bnPredictionErrorGraphCtx;
     let pastBNPredictionGraphCanvas, pastBNPredictionGraphCtx;
+    let bnLastNodePositions = {};
     let simulationViewContainer, pastRunsViewContainer, bnVisualizationContainer;
     let graphTooltip;
+
+    function getNodeGroup(name) {
+      const lower = name.toLowerCase();
+      if (lower.includes('plant')) return 'plant';
+      if (lower.includes('prey')) return 'prey';
+      if (lower.includes('predator')) return 'predator';
+      if (lower.startsWith('derived')) return 'derived';
+      if (lower.includes('extinction') || lower.includes('favorablegrowth') || lower.includes('starvationrisk')) return 'outcome';
+      return 'other';
+    }
 
     let currentRunNumber = 1;
     let completedRuns = [];
@@ -2831,9 +2858,11 @@ function updateCurrentBNPredictionsDisplay() {
       });
       DOM_ELEMENTS.currentRunInfo.classList.add('visible'); // Show current run info by default
 
-      // Data Management Buttons
-      DOM_ELEMENTS.exportRunsButton.addEventListener('click', exportRunsData);
-      DOM_ELEMENTS.importRunsFile.addEventListener('change', importRunsData);
+        // Data Management Buttons
+        DOM_ELEMENTS.exportRunsButton.addEventListener('click', exportRunsData);
+        DOM_ELEMENTS.importRunsFile.addEventListener('change', importRunsData);
+        if (DOM_ELEMENTS.exportBNPngButton) DOM_ELEMENTS.exportBNPngButton.addEventListener('click', exportBNAsImage);
+        if (DOM_ELEMENTS.exportBNSvgButton) DOM_ELEMENTS.exportBNSvgButton.addEventListener('click', exportBNAsSVG);
     }
 
     function startNewRun(parametersToUse) {
@@ -4081,8 +4110,218 @@ function displayPastRunDetails(runIndex) {
       render();
     }
     function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFontSize, detailOffsetY, detailText) { let words = text.split(' '); let line = ''; let lines = []; let currentFontSize = baseFontSize; const MIN_FONT_SIZE = Math.max(8, detailFontSize - 1); function testLineWidth(testLineStr, fontStr) { const originalFont = ctxLocal.font; ctxLocal.font = fontStr; const width = ctxLocal.measureText(testLineStr).width; ctxLocal.font = originalFont; return width; } let attempt = 0; let fontString = `bold ${currentFontSize}px 'Inter', sans-serif`; while (testLineWidth(text, fontString) > maxWidth && currentFontSize > MIN_FONT_SIZE && attempt < 5) { currentFontSize -= 0.5; fontString = `bold ${currentFontSize}px 'Inter', sans-serif`; attempt++; } ctxLocal.font = fontString; if (ctxLocal.measureText(text).width <= maxWidth) { lines.push(text); } else { let splitPoint = -1; const camelCaseMatch = text.match(/[a-z][A-Z]/); if (camelCaseMatch && camelCaseMatch.index > 0) splitPoint = camelCaseMatch.index + 1; else if (text.includes("Growth")) splitPoint = text.indexOf("Growth"); else if (text.includes("Cooldown")) splitPoint = text.indexOf("Cooldown"); else if (text.includes("Reproduction")) splitPoint = text.indexOf("Reproduction"); else if (text.includes("Ratio")) splitPoint = text.indexOf("Ratio") > 0 ? text.indexOf("Ratio") : (text.indexOf("To") > 0 ? text.indexOf("To") : -1); if (splitPoint !== -1) { const l1 = text.substring(0, splitPoint); const l2 = text.substring(splitPoint); if (ctxLocal.measureText(l1).width <= maxWidth && ctxLocal.measureText(l2).width <= maxWidth) { lines.push(l1); lines.push(l2); } } if (lines.length === 0) { for (let n = 0; n < words.length; n++) { let testLineContent = line + words[n] + ' '; if (ctxLocal.measureText(testLineContent).width > maxWidth && n > 0) { lines.push(line.trim()); line = words[n] + ' '; } else line = testLineContent; } lines.push(line.trim()); } } lines = lines.map(l => { if (ctxLocal.measureText(l).width > maxWidth) { let truncated = l; while (ctxLocal.measureText(truncated + "...").width > maxWidth && truncated.length > 3) truncated = truncated.slice(0, -1); return truncated + "..."; } return l; }); if (lines.length > 2) lines = lines.slice(0, 2); const lineHeight = currentFontSize * 1.1; let startY = y - ((lines.length - 1) * lineHeight / 2) - (detailText ? detailFontSize / 3 : 0); ctxLocal.fillStyle = getComputedCssVar(CSS_VARS.TEXT_COLOR); ctxLocal.font = fontString; lines.forEach((l, i) => ctxLocal.fillText(l, x, startY + i * lineHeight)); if (detailText) { ctxLocal.font = `${detailFontSize}px 'Inter', sans-serif`; if (ctxLocal.measureText(detailText).width > maxWidth) { let truncatedDetail = detailText; while (ctxLocal.measureText(truncatedDetail + "...").width > maxWidth && truncatedDetail.length > 3) truncatedDetail = truncatedDetail.slice(0, -1); detailText = truncatedDetail + "..."; } ctxLocal.fillText(detailText, x, y + detailOffsetY); } }
-    function drawBayesianNetworkVisualization() { if (!simBayesianNetwork || !bnVisualizationCanvas) return; const canvasEl = bnVisualizationCanvas, ctxLocal = bnVisualizationCtx; canvasEl.width = canvasEl.clientWidth; canvasEl.height = canvasEl.clientHeight; ctxLocal.clearRect(0, 0, canvasEl.width, canvasEl.height); ctxLocal.fillStyle = getComputedCssVar(CSS_VARS.BG_COLOR); ctxLocal.fillRect(0, 0, canvasEl.width, canvasEl.height); const nodes = simBayesianNetwork.nodes, sortedNodeNames = simBayesianNetwork.topologicalSort(); if (!sortedNodeNames) { console.error("BN: Could not perform topological sort for visualization."); return; } const nodePositions = {}; const layers = {}; const nodeDepths = {}; function getNodeDepth(nodeName) { if (nodeDepths[nodeName] !== undefined) return nodeDepths[nodeName]; const node = nodes.get(nodeName); if (!node) return -1; if (node.parents.length === 0) return nodeDepths[nodeName] = 0; let maxParentDepth = -1; for (const parent of node.parents) maxParentDepth = Math.max(maxParentDepth, getNodeDepth(parent.name)); return nodeDepths[nodeName] = maxParentDepth + 1; } sortedNodeNames.forEach(name => { const depth = getNodeDepth(name); if (!layers[depth]) layers[depth] = []; layers[depth].push(name); }); const PADDING_X = 30, PADDING_Y = 40, NODE_WIDTH_BASE = 120, NODE_WIDTH_MAX = 170, NODE_HEIGHT = 55, NODE_RADIUS = 8; const NODE_Y_SPACING_PER_LAYER_DEPTH = NODE_HEIGHT * 2.6; const MIN_NODE_SPACING_X_FACTOR = 1.2; const NAME_FONT_SIZE_BASE = 11, DETAIL_FONT_SIZE = 9; const DETAIL_Y_OFFSET_FROM_CENTER = NODE_HEIGHT / 2 - DETAIL_FONT_SIZE - 5; Object.keys(layers).map(Number).sort((a, b) => a - b).forEach(depth => { const layerNodes = layers[depth]; const numNodesInLayer = layerNodes.length; const dynamicNodeWidth = Math.max(NODE_WIDTH_BASE, Math.min(NODE_WIDTH_MAX, (canvasEl.width - PADDING_X * (numNodesInLayer + 1)) / numNodesInLayer)); const nodeSpacingX = dynamicNodeWidth * MIN_NODE_SPACING_X_FACTOR; let totalWidthForLayer = numNodesInLayer * dynamicNodeWidth + (numNodesInLayer > 1 ? (numNodesInLayer - 1) * (nodeSpacingX - dynamicNodeWidth) : 0); let startX = (canvasEl.width - totalWidthForLayer) / 2; if (startX < PADDING_X) startX = PADDING_X; layerNodes.forEach((nodeName, index) => { nodePositions[nodeName] = { x: startX + index * nodeSpacingX + dynamicNodeWidth / 2, y: PADDING_Y + depth * NODE_Y_SPACING_PER_LAYER_DEPTH + NODE_HEIGHT / 2, width: dynamicNodeWidth }; }); }); const edgeColor = getComputedCssVar(CSS_VARS.BN_EDGE_COLOR); const arrowheadColor = getComputedCssVar(CSS_VARS.BN_ARROWHEAD_COLOR); const nodeParamBg = getComputedCssVar(CSS_VARS.BN_NODE_PARAM_BG); const nodeOutcomeBg = getComputedCssVar(CSS_VARS.BN_NODE_OUTCOME_BG); const nodeBorderColor = getComputedCssVar(CSS_VARS.BN_NODE_BORDER); ctxLocal.lineWidth = 1.5; sortedNodeNames.forEach(nodeName => { const childData = nodePositions[nodeName], node = nodes.get(nodeName); if (!childData || !node) return; const childPos = { x: childData.x, y: childData.y }; node.parents.forEach(parent => { const parentData = nodePositions[parent.name]; if (!parentData) return; const parentPos = { x: parentData.x, y: parentData.y }; ctxLocal.strokeStyle = edgeColor; ctxLocal.beginPath(); ctxLocal.moveTo(parentPos.x, parentPos.y); ctxLocal.lineTo(childPos.x, childPos.y); ctxLocal.stroke(); const angle = Math.atan2(childPos.y - parentPos.y, childPos.x - parentPos.x), arrowSize = 8, nodeBoundaryOffset = NODE_HEIGHT / 2 + 3; ctxLocal.beginPath(); ctxLocal.moveTo(childPos.x - nodeBoundaryOffset * Math.cos(angle), childPos.y - nodeBoundaryOffset * Math.sin(angle)); ctxLocal.lineTo(childPos.x - nodeBoundaryOffset * Math.cos(angle) - arrowSize * Math.cos(angle - Math.PI / 6), childPos.y - nodeBoundaryOffset * Math.sin(angle) - arrowSize * Math.sin(angle - Math.PI / 6)); ctxLocal.lineTo(childPos.x - nodeBoundaryOffset * Math.cos(angle) - arrowSize * Math.cos(angle + Math.PI / 6), childPos.y - nodeBoundaryOffset * Math.sin(angle) - arrowSize * Math.sin(angle + Math.PI / 6)); ctxLocal.closePath(); ctxLocal.fillStyle = arrowheadColor; ctxLocal.fill(); }); }); ctxLocal.textAlign = 'center'; ctxLocal.textBaseline = 'middle'; Object.entries(nodePositions).forEach(([nodeName, nodeData]) => { const node = nodes.get(nodeName); if (!node) return; const pos = { x: nodeData.x, y: nodeData.y }, current_node_width = nodeData.width; const TEXT_MARGIN_X = 8; const maxTextWidth = current_node_width - TEXT_MARGIN_X * 2; ctxLocal.fillStyle = node.type === 'discrete' ? nodeOutcomeBg : nodeParamBg; ctxLocal.strokeStyle = nodeBorderColor; ctxLocal.lineWidth = 1.2; ctxLocal.beginPath(); if (typeof ctxLocal.roundRect === 'function') { ctxLocal.roundRect(pos.x - current_node_width / 2, pos.y - NODE_HEIGHT / 2, current_node_width, NODE_HEIGHT, NODE_RADIUS); } else { ctxLocal.rect(pos.x - current_node_width / 2, pos.y - NODE_HEIGHT / 2, current_node_width, NODE_HEIGHT); } ctxLocal.fill(); ctxLocal.stroke(); let detailText = ''; if (node.type === 'discrete' && node.states) detailText = `(${node.states.join(', ')})`; else if (node.type === 'continuous') { const pConf = allBnParamAndDerivedNodeConfigs.find(pc => pc.name === node.name); if (pConf && pConf.min !== undefined && pConf.max !== undefined) { let precision = 2; if (pConf.isTunable) { const paramDef = tunableParams.find(tp => tp.configKey === pConf.configKey); if (paramDef) precision = getPrecision(paramDef.step); } else { precision = (pConf.max - pConf.min) < 10 ? 2 : ((pConf.max - pConf.min) < 1 ? 3 : 1); if (pConf.step) precision = getPrecision(pConf.step); else if ((pConf.max - pConf.min) === 0) precision = 0; } detailText = `[${pConf.min.toFixed(precision)}-${pConf.max.toFixed(precision)}]`; } else if (node.min !== undefined && node.max !== undefined) detailText = `[${node.min.toFixed(2)}-${node.max.toFixed(2)}]`; } wrapAndDrawText(ctxLocal, nodeName, pos.x, pos.y, maxTextWidth, NAME_FONT_SIZE_BASE, DETAIL_FONT_SIZE, DETAIL_Y_OFFSET_FROM_CENTER, detailText); }); }
-    function populateBNLegend() { const legendDiv = DOM_ELEMENTS.bnLegend; if (!legendDiv) return; legendDiv.innerHTML = ''; const nodeParamBg = getComputedCssVar(CSS_VARS.BN_NODE_PARAM_BG); const nodeOutcomeBg = getComputedCssVar(CSS_VARS.BN_NODE_OUTCOME_BG); const edgeColor = getComputedCssVar(CSS_VARS.BN_EDGE_COLOR); const arrowheadColor = getComputedCssVar(CSS_VARS.BN_ARROWHEAD_COLOR); legendDiv.appendChild(createLegendItem(nodeParamBg, "Parameter/Input Node")); legendDiv.appendChild(createLegendItem(nodeOutcomeBg, "Outcome/State Node")); const edgeLegendItem = document.createElement('div'); edgeLegendItem.className = 'legend-item'; edgeLegendItem.innerHTML = `<span class="legend-color-swatch" style="background-color: transparent; border:none; display:inline-flex; align-items:center; margin-right: 6px; position:relative; top:1px;"><svg width="12" height="12" viewBox="0 0 12 12" style="overflow:visible;"><line x1="0" y1="6" x2="12" y2="6" stroke="${edgeColor}" stroke-width="1.5"/><polygon points="11,6 7,4 7,8" fill="${arrowheadColor}"/></svg></span> Causal Influence`; legendDiv.appendChild(edgeLegendItem); }
+      function drawBayesianNetworkVisualization() {
+        if (!simBayesianNetwork || !bnVisualizationCanvas) return;
+        const canvasEl = bnVisualizationCanvas, ctxLocal = bnVisualizationCtx;
+        canvasEl.width = canvasEl.clientWidth;
+        canvasEl.height = canvasEl.clientHeight;
+        ctxLocal.clearRect(0, 0, canvasEl.width, canvasEl.height);
+        ctxLocal.fillStyle = getComputedCssVar(CSS_VARS.BG_COLOR);
+        ctxLocal.fillRect(0, 0, canvasEl.width, canvasEl.height);
+        const nodes = simBayesianNetwork.nodes;
+        const sortedNodeNames = simBayesianNetwork.topologicalSort();
+        if (!sortedNodeNames) { console.error("BN: Could not perform topological sort for visualization."); return; }
+        const nodePositions = {}, layers = {}, nodeDepths = {};
+        function getDepth(name) {
+          if (nodeDepths[name] !== undefined) return nodeDepths[name];
+          const node = nodes.get(name); if (!node) return -1;
+          if (node.parents.length === 0) return nodeDepths[name] = 0;
+          let d = -1; node.parents.forEach(p => { d = Math.max(d, getDepth(p.name)); });
+          return nodeDepths[name] = d + 1;
+        }
+        sortedNodeNames.forEach(n => { const d = getDepth(n); if (!layers[d]) layers[d] = []; layers[d].push(n); });
+
+        const PADDING_X = 30, PADDING_Y = 40;
+        const NODE_WIDTH_BASE = 120, NODE_WIDTH_MAX = 170;
+        const NODE_HEIGHT = 55, NODE_RADIUS = 8;
+        const NODE_Y_SPACING_PER_LAYER_DEPTH = NODE_HEIGHT * 2.6;
+        const MIN_NODE_SPACING_X_FACTOR = 1.2;
+        const NAME_FONT_SIZE_BASE = 11, DETAIL_FONT_SIZE = 9;
+        const DETAIL_Y_OFFSET_FROM_CENTER = NODE_HEIGHT / 2 - DETAIL_FONT_SIZE - 5;
+
+        const sortedDepths = Object.keys(layers).map(Number).sort((a,b)=>a-b);
+        const parentX = {};
+        sortedDepths.forEach(depth => {
+          const layerNodes = layers[depth];
+          if (depth > 0) {
+            layerNodes.sort((a,b)=>{
+              const avg = name => {
+                const n = nodes.get(name); if (!n || n.parents.length===0) return 0;
+                let sum=0,c=0; n.parents.forEach(p=>{ if(parentX[p.name]!==undefined){ sum+=parentX[p.name]; c++; }});
+                return c?sum/c:0;
+              };
+              return avg(a)-avg(b);
+            });
+          }
+          const num = layerNodes.length;
+          const dynamicNodeWidth = Math.max(NODE_WIDTH_BASE, Math.min(NODE_WIDTH_MAX, (canvasEl.width - PADDING_X*(num+1))/num));
+          const nodeSpacingX = dynamicNodeWidth * MIN_NODE_SPACING_X_FACTOR;
+          let totalWidth = num*dynamicNodeWidth + (num>1 ? (num-1)*(nodeSpacingX - dynamicNodeWidth) : 0);
+          let startX = (canvasEl.width - totalWidth)/2; if (startX < PADDING_X) startX = PADDING_X;
+          layerNodes.forEach((name, idx)=>{
+            const x = startX + idx*nodeSpacingX + dynamicNodeWidth/2;
+            const y = PADDING_Y + depth*NODE_Y_SPACING_PER_LAYER_DEPTH + NODE_HEIGHT/2;
+            nodePositions[name] = { x, y, width: dynamicNodeWidth };
+            parentX[name] = x;
+          });
+        });
+
+        const edgeColor = getComputedCssVar(CSS_VARS.BN_EDGE_COLOR);
+        const edgeColorPositive = getComputedCssVar(CSS_VARS.BN_EDGE_COLOR_POSITIVE);
+        const edgeColorNegative = getComputedCssVar(CSS_VARS.BN_EDGE_COLOR_NEGATIVE);
+        const arrowheadColor = getComputedCssVar(CSS_VARS.BN_ARROWHEAD_COLOR);
+        const nodeParamBg = getComputedCssVar(CSS_VARS.BN_NODE_PARAM_BG);
+        const nodeOutcomeBg = getComputedCssVar(CSS_VARS.BN_NODE_OUTCOME_BG);
+        const nodeBorderColor = getComputedCssVar(CSS_VARS.BN_NODE_BORDER);
+        const groupColors = {
+          plant: getComputedCssVar(CSS_VARS.BN_GROUP_PLANT),
+          prey: getComputedCssVar(CSS_VARS.BN_GROUP_PREY),
+          predator: getComputedCssVar(CSS_VARS.BN_GROUP_PREDATOR),
+          derived: getComputedCssVar(CSS_VARS.BN_GROUP_DERIVED),
+          outcome: getComputedCssVar(CSS_VARS.BN_GROUP_OUTCOME)
+        };
+
+        sortedNodeNames.forEach(childName => {
+          const childData = nodePositions[childName];
+          const childNode = nodes.get(childName);
+          if (!childData || !childNode) return;
+          const childPos = { x: childData.x, y: childData.y };
+          childNode.parents.forEach(parent => {
+            const parentData = nodePositions[parent.name];
+            if (!parentData) return;
+            const parentPos = { x: parentData.x, y: parentData.y };
+            const rawWeight = childNode.continuousParams.weights && childNode.continuousParams.weights[parent.name];
+            const weight = rawWeight !== undefined ? Math.abs(rawWeight) : 1;
+            const sign = rawWeight !== undefined ? Math.sign(rawWeight) : 0;
+            ctxLocal.lineWidth = 1 + Math.min(4, weight*2);
+            const strokeColor = sign < 0 ? edgeColorNegative : (sign > 0 ? edgeColorPositive : edgeColor);
+            ctxLocal.strokeStyle = strokeColor;
+            ctxLocal.globalAlpha = 0.4 + Math.min(0.6, weight/2);
+            ctxLocal.beginPath();
+            ctxLocal.moveTo(parentPos.x, parentPos.y);
+            ctxLocal.lineTo(childPos.x, childPos.y);
+            ctxLocal.stroke();
+            ctxLocal.globalAlpha = 1;
+            const angle = Math.atan2(childPos.y - parentPos.y, childPos.x - parentPos.x);
+            const arrowSize = 8;
+            const nodeBoundaryOffset = NODE_HEIGHT/2 + 3;
+            ctxLocal.beginPath();
+            ctxLocal.moveTo(childPos.x - nodeBoundaryOffset*Math.cos(angle), childPos.y - nodeBoundaryOffset*Math.sin(angle));
+            ctxLocal.lineTo(childPos.x - nodeBoundaryOffset*Math.cos(angle) - arrowSize*Math.cos(angle - Math.PI/6), childPos.y - nodeBoundaryOffset*Math.sin(angle) - arrowSize*Math.sin(angle - Math.PI/6));
+            ctxLocal.lineTo(childPos.x - nodeBoundaryOffset*Math.cos(angle) - arrowSize*Math.cos(angle + Math.PI/6), childPos.y - nodeBoundaryOffset*Math.sin(angle) - arrowSize*Math.sin(angle + Math.PI/6));
+            ctxLocal.closePath();
+            ctxLocal.fillStyle = strokeColor;
+            ctxLocal.fill();
+          });
+        });
+
+        ctxLocal.textAlign = 'center';
+        ctxLocal.textBaseline = 'middle';
+        Object.entries(nodePositions).forEach(([nodeName, nodeData]) => {
+          const node = nodes.get(nodeName);
+          if (!node) return;
+          const pos = { x: nodeData.x, y: nodeData.y };
+          const currentWidth = nodeData.width;
+          const TEXT_MARGIN_X = 8;
+          const maxTextWidth = currentWidth - TEXT_MARGIN_X*2;
+          const groupColor = groupColors[getNodeGroup(nodeName)];
+          ctxLocal.fillStyle = groupColor || (node.type === 'discrete' ? nodeOutcomeBg : nodeParamBg);
+          ctxLocal.strokeStyle = nodeBorderColor;
+          ctxLocal.lineWidth = 1.2;
+          ctxLocal.beginPath();
+          if (typeof ctxLocal.roundRect === 'function') {
+            ctxLocal.roundRect(pos.x - currentWidth/2, pos.y - NODE_HEIGHT/2, currentWidth, NODE_HEIGHT, NODE_RADIUS);
+          } else {
+            ctxLocal.rect(pos.x - currentWidth/2, pos.y - NODE_HEIGHT/2, currentWidth, NODE_HEIGHT);
+          }
+          ctxLocal.fill();
+          ctxLocal.stroke();
+          let detailText = '';
+          if (node.type === 'discrete' && node.states) {
+            if (node.parents.length === 0 && node.cpt) {
+              detailText = '(' + node.states.map(s => `${s}:${(node.cpt[s] ?? 0).toFixed(2)}`).join(', ') + ')';
+            } else {
+              detailText = '(' + node.states.join(', ') + ')';
+            }
+          } else if (node.type === 'continuous') {
+            const pConf = allBnParamAndDerivedNodeConfigs.find(pc => pc.name === node.name);
+            if (pConf && pConf.min !== undefined && pConf.max !== undefined) {
+              let precision = 2;
+              if (pConf.isTunable) {
+                const paramDef = tunableParams.find(tp => tp.configKey === pConf.configKey);
+                if (paramDef) precision = getPrecision(paramDef.step);
+              } else {
+                precision = (pConf.max - pConf.min) < 10 ? 2 : ((pConf.max - pConf.min) < 1 ? 3 : 1);
+                if (pConf.step) precision = getPrecision(pConf.step);
+                else if ((pConf.max - pConf.min) === 0) precision = 0;
+              }
+              detailText = `[${pConf.min.toFixed(precision)}-${pConf.max.toFixed(precision)}]`;
+            } else if (node.min !== undefined && node.max !== undefined) {
+              detailText = `[${node.min.toFixed(2)}-${node.max.toFixed(2)}]`;
+            }
+          }
+          wrapAndDrawText(ctxLocal, nodeName, pos.x, pos.y, maxTextWidth, NAME_FONT_SIZE_BASE, DETAIL_FONT_SIZE, DETAIL_Y_OFFSET_FROM_CENTER, detailText);
+        });
+        bnLastNodePositions = nodePositions;
+      }
+    function populateBNLegend() {
+      const legendDiv = DOM_ELEMENTS.bnLegend;
+      if (!legendDiv) return;
+      legendDiv.innerHTML = "";
+      const nodeParamBg = getComputedCssVar(CSS_VARS.BN_NODE_PARAM_BG);
+      const nodeOutcomeBg = getComputedCssVar(CSS_VARS.BN_NODE_OUTCOME_BG);
+      const edgeColor = getComputedCssVar(CSS_VARS.BN_EDGE_COLOR);
+      const posEdgeColor = getComputedCssVar(CSS_VARS.BN_EDGE_COLOR_POSITIVE);
+      const negEdgeColor = getComputedCssVar(CSS_VARS.BN_EDGE_COLOR_NEGATIVE);
+      const plantColor = getComputedCssVar(CSS_VARS.BN_GROUP_PLANT);
+      const preyColor = getComputedCssVar(CSS_VARS.BN_GROUP_PREY);
+      const predColor = getComputedCssVar(CSS_VARS.BN_GROUP_PREDATOR);
+      const derivedColor = getComputedCssVar(CSS_VARS.BN_GROUP_DERIVED);
+      const outcomeColor = getComputedCssVar(CSS_VARS.BN_GROUP_OUTCOME);
+      legendDiv.appendChild(createLegendItem(plantColor, 'Plant'));
+      legendDiv.appendChild(createLegendItem(preyColor, 'Prey'));
+      legendDiv.appendChild(createLegendItem(predColor, 'Predator'));
+      legendDiv.appendChild(createLegendItem(derivedColor, 'Derived'));
+      legendDiv.appendChild(createLegendItem(outcomeColor, 'Outcome'));
+      const edgeLegendItemPos = document.createElement('div');
+      edgeLegendItemPos.className = 'legend-item';
+      edgeLegendItemPos.innerHTML = `<span class="legend-color-swatch" style="background-color: transparent; border:none; display:inline-flex; align-items:center; margin-right: 6px; position:relative; top:1px;"><svg width="12" height="12" viewBox="0 0 12 12" style="overflow:visible;"><line x1="0" y1="6" x2="12" y2="6" stroke="${posEdgeColor}" stroke-width="1.5"/><polygon points="11,6 7,4 7,8" fill="${posEdgeColor}"/></svg></span> Positive Influence`;
+      legendDiv.appendChild(edgeLegendItemPos);
+      const edgeLegendItemNeg = document.createElement('div');
+      edgeLegendItemNeg.className = 'legend-item';
+      edgeLegendItemNeg.innerHTML = `<span class="legend-color-swatch" style="background-color: transparent; border:none; display:inline-flex; align-items:center; margin-right: 6px; position:relative; top:1px;"><svg width="12" height="12" viewBox="0 0 12 12" style="overflow:visible;"><line x1="0" y1="6" x2="12" y2="6" stroke="${negEdgeColor}" stroke-width="1.5"/><polygon points="11,6 7,4 7,8" fill="${negEdgeColor}"/></svg></span> Negative Influence`;
+      legendDiv.appendChild(edgeLegendItemNeg);
+    }
+
+      function exportBNAsImage() {
+        if (!bnVisualizationCanvas) return;
+        const link = document.createElement('a');
+        link.download = 'bayesian_network.png';
+        link.href = bnVisualizationCanvas.toDataURL('image/png');
+        link.click();
+    }
+
+    function exportBNAsSVG() {
+      if (!simBayesianNetwork || !bnVisualizationCanvas) return;
+      drawBayesianNetworkVisualization();
+      const width = bnVisualizationCanvas.width;
+      const height = bnVisualizationCanvas.height;
+      let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">`;
+      Object.values(bnLastNodePositions).forEach(pos => {
+        svg += `<rect x="${pos.x - pos.width/2}" y="${pos.y - 27.5}" width="${pos.width}" height="55" rx="8" ry="8" fill="white" stroke="black" stroke-width="1"/>`;
+      });
+      svg += `</svg>`;
+        const blob = new Blob([svg], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'bayesian_network.svg';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
     function exportRunsData() { const dataToExport = { version: SIM_DATA_VERSION, initialConfigSnapshot, completedRuns }; const jsonData = JSON.stringify(dataToExport, null, 2); const blob = new Blob([jsonData], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); const date = new Date(); const dateString = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`; a.download = `ecosystem_runs_data_${dateString}.json`; a.href = url; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); console.log("Exported runs data."); }
     function importRunsData(event) {
       const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (e) => {
@@ -4291,7 +4530,7 @@ function displayPastRunDetails(runIndex) {
         'backToSimulationButton', 'noPastRunsMessage', 'pastRunsSummaryList', 'pastRunDetails',
         'pastRunNumberDisplay', 'pastRunScoreDisplay', 'pastRunAutoPilotScoreDisplay',
         'pastRunParamsDisplay', 'pastRunStatsDisplay',
-        'pastPopulationGraphLegend', 'pastCumulativeGraphLegend', 'bnLegend',
+          'pastPopulationGraphLegend', 'pastCumulativeGraphLegend', 'bnLegend', 'exportBNPngButton', 'exportBNSvgButton',
         'currentPopulationGraphLegend', 'currentCumulativeGraphLegend',
         'bnRunStartPreyExtinctionPrediction', 'bnRunStartPredatorExtinctionPrediction',
         'bnRunStartPlantGrowthPrediction', 'bnRunStartPreyGrowthPrediction',
