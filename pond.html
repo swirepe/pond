@@ -43,6 +43,7 @@
       /* A general death color for prey */
       --graph-total-predator-death-color: hsl(0, 60%, 50%);
       /* A general death color for predators */
+      --graph-bn-error-color: hsl(calc(var(--base-hue) + 180), 80%, 70%);
 
       /* BN Vis Colors */
       --bn-node-param-bg: hsl(var(--base-hue), 15%, 22%);
@@ -126,7 +127,9 @@
     }
 
     #populationGraphCanvas,
-    #cumulativeGraphCanvas {
+    #cumulativeGraphCanvas,
+    #bnPredictionGraphCanvas,
+    #bnPredictionErrorGraphCanvas {
       width: 100%;
       height: 150px;
       background-color: hsl(var(--base-hue), 15%, 12%);
@@ -625,6 +628,11 @@
         <canvas id="bnPredictionGraphCanvas"></canvas>
         <div id="bnPredictionGraphLegend" class="graph-legend"></div>
       </div>
+      <div class="stat-subsection">
+        <h3>BN Prediction Error Per Run</h3>
+        <canvas id="bnPredictionErrorGraphCanvas"></canvas>
+        <div id="bnPredictionErrorGraphLegend" class="graph-legend"></div>
+      </div>
     </div>
   </div>
 
@@ -736,6 +744,7 @@
   <div id="currentRunInfo"
     style="position: absolute; top: 60px; left: 20px; color: var(--text-color); font-size: 0.9em; background-color: var(--ui-bg-color); padding: 5px 10px; border-radius: 5px; border: 1px solid var(--ui-border-color); opacity:0;">
     Current Run: <span id="currentRunDisplay">1</span>
+    &nbsp;| Exploration: <span id="explorationFactorDisplay">0.00</span>
   </div>
   </div>
 
@@ -843,6 +852,7 @@
     let pastPopulationGraphCanvas, pastPopulationGraphCtx, pastCumulativeGraphCanvas, pastCumulativeGraphCtx;
     let bnVisualizationCanvas, bnVisualizationCtx;
     let bnPredictionGraphCanvas, bnPredictionGraphCtx;
+    let bnPredictionErrorGraphCanvas, bnPredictionErrorGraphCtx;
     let pastBNPredictionGraphCanvas, pastBNPredictionGraphCtx;
     let simulationViewContainer, pastRunsViewContainer, bnVisualizationContainer;
 
@@ -893,6 +903,11 @@
       maxLength: 200
     };
 
+    const bnPredictionErrorHistory = {
+      errors: [],
+      maxLength: 200
+    };
+
     let historyUpdateCounter = 0;
     const historyUpdateInterval = 30; // Update graphs every 30 simulation steps (0.5 seconds at 60FPS)
 
@@ -908,11 +923,25 @@
     let intervalPreyPredDeaths = 0, intervalPreyStarvDeaths = 0;
     let intervalPredStarvDeaths = 0, intervalPredMobDeaths = 0;
 
-    let autoPilotStats = { bestScoreEver: -Infinity, stagnationCounter: 0, lastScore: 0 };
+    let autoPilotStats = {
+      bestScoreEver: -Infinity,
+      stagnationCounter: 0,
+      lastScore: 0,
+      lastGpVariance: 0,
+      bnPredictionErrorAvg: 0,
+      bnPredictionErrorCount: 0,
+      modelUncertainty: 0,
+    };
     function resetAutoPilotStats() {
       autoPilotStats.bestScoreEver = -Infinity;
       autoPilotStats.stagnationCounter = 0;
       autoPilotStats.lastScore = 0;
+      autoPilotStats.lastGpVariance = 0;
+      autoPilotStats.bnPredictionErrorAvg = 0;
+      autoPilotStats.bnPredictionErrorCount = 0;
+      autoPilotStats.modelUncertainty = 0;
+      if (DOM_ELEMENTS.explorationFactorDisplay)
+        DOM_ELEMENTS.explorationFactorDisplay.textContent = '0.00';
     }
 
     const BN_ERROR_HISTORY_LENGTH = 20;
@@ -1929,6 +1958,7 @@ function updateCurrentBNPredictionsDisplay() {
     function distance(x1, y1, x2, y2) { const dx = x1 - x2; const dy = y1 - y2; return Math.sqrt(dx * dx + dy * dy); }
     function distanceSq(x1, y1, x2, y2) { const dx = x1 - x2; const dy = y1 - y2; return dx * dx + dy * dy; }
     function normalizeAngle(angle) { while (angle > Math.PI) angle -= 2 * Math.PI; while (angle < -Math.PI) angle += 2 * Math.PI; return angle; }
+    function clamp(val, min, max) { return Math.min(Math.max(val, min), max); }
     function weightedRandomSelect(options) { if (!options || options.length === 0) return null; const totalWeight = options.reduce((sum, option) => sum + Math.max(0, option.weight), 0); if (totalWeight <= 0) { return options.length > 0 ? options[randomInt(0, options.length - 1)].item : null; } let randomVal = Math.random() * totalWeight; for (const option of options) { const currentWeight = Math.max(0, option.weight); if (randomVal < currentWeight) return option.item; randomVal -= currentWeight; } return options.length > 0 ? options[options.length - 1].item : null; }
 
     function modifyHslColor(hslString, satMultiplier, lumMultiplier, alpha = null) {
@@ -2725,7 +2755,12 @@ function updateCurrentBNPredictionsDisplay() {
           if (bnPredictionGraphCanvas) { // Check if it exists
             bnPredictionGraphCanvas.width = bnPredictionGraphCanvas.clientWidth;
             bnPredictionGraphCanvas.height = bnPredictionGraphCanvas.clientHeight;
-            drawBNPredictionGraph(); // Redraw this too
+            drawBNPredictionGraph();
+          }
+          if (bnPredictionErrorGraphCanvas) {
+            bnPredictionErrorGraphCanvas.width = bnPredictionErrorGraphCanvas.clientWidth;
+            bnPredictionErrorGraphCanvas.height = bnPredictionErrorGraphCanvas.clientHeight;
+            drawBNPredictionErrorGraph();
           }
           drawPopulationGraph();
           drawCumulativeGraph();
@@ -2803,6 +2838,17 @@ function updateCurrentBNPredictionsDisplay() {
             autoPilotStats.stagnationCounter++;
           }
           autoPilotStats.lastScore = lastRunAutoPilotScore;
+          const bnErr = calculateBNPredictionError(lastRunData);
+          if (bnErr !== null) {
+            autoPilotStats.bnPredictionErrorCount++;
+            autoPilotStats.bnPredictionErrorAvg += (bnErr - autoPilotStats.bnPredictionErrorAvg) / autoPilotStats.bnPredictionErrorCount;
+            bnPredictionErrorHistory.errors.push(bnErr);
+            if (bnPredictionErrorHistory.errors.length > bnPredictionErrorHistory.maxLength) bnPredictionErrorHistory.errors.shift();
+            lastRunData.bnPredictionError = bnErr;
+            if (DOM_ELEMENTS.statsOverlay.classList.contains('visible') && bnPredictionErrorGraphCanvas) {
+              drawBNPredictionErrorGraph();
+            }
+          }
         }
       }
 
@@ -2975,12 +3021,58 @@ function updateCurrentBNPredictionsDisplay() {
       return score;
     }
 
+    function calculateBNPredictionError(runData) {
+      const preds = runData.statistics.bnPredictionsAtRunStart;
+      if (!preds || preds.extinction?.error || preds.growth?.error || preds.starvationRisk?.error) return null;
+
+      const p = runData.parameters;
+      const s = runData.statistics;
+      const duration = runData.durationFrames > 0 ? runData.durationFrames : 1;
+
+      const outcomes = {
+        preyExtinct: p.initialPrey > 0 && s.deathFrames.prey !== null,
+        predatorExtinct: p.initialPredators > 0 && s.deathFrames.predator !== null,
+        growPlant: (s.totalPlantBirths / duration) > (s.totalPlantsConsumed / duration),
+        growPrey: (s.totalPreyBirths / duration) > ((s.totalPreyDeathsByPredation + s.totalPreyDeathsByStarvation) / duration),
+        growPredator: (s.totalPredatorBirths / duration) > ((s.totalPredatorDeathsByStarvation + s.totalPredatorDeathsByMobbing) / duration),
+        starvPrey: (() => {
+          const frac = s.totalPreyDeathsByStarvation / Math.max(1, s.totalPreyDeathsByPredation + s.totalPreyDeathsByStarvation);
+          const rate = (s.totalPreyDeathsByStarvation / duration) / Math.max(1, p.initialPrey);
+          return (frac > 0.70 && (s.totalPreyDeathsByPredation + s.totalPreyDeathsByStarvation) > 5) ||
+            (rate > 0.003 && p.initialPrey > 5 && duration > 100);
+        })(),
+        starvPred: (() => {
+          const frac = s.totalPredatorDeathsByStarvation / Math.max(1, s.totalPredatorDeathsByStarvation + s.totalPredatorDeathsByMobbing);
+          const rate = (s.totalPredatorDeathsByStarvation / duration) / Math.max(1, p.initialPredators);
+          return (frac > 0.70 && (s.totalPredatorDeathsByStarvation + s.totalPredatorDeathsByMobbing) > 2) ||
+            (rate > 0.004 && p.initialPredators > 2 && duration > 100);
+        })(),
+      };
+
+      const diffs = [
+        Math.abs(preds.extinction.prey - (outcomes.preyExtinct ? 1 : 0)),
+        Math.abs(preds.extinction.predator - (outcomes.predatorExtinct ? 1 : 0)),
+        Math.abs(preds.growth.plant - (outcomes.growPlant ? 1 : 0)),
+        Math.abs(preds.growth.prey - (outcomes.growPrey ? 1 : 0)),
+        Math.abs(preds.growth.predator - (outcomes.growPredator ? 1 : 0)),
+        Math.abs(preds.starvationRisk.prey - (outcomes.starvPrey ? 1 : 0)),
+        Math.abs(preds.starvationRisk.predator - (outcomes.starvPred ? 1 : 0)),
+      ];
+      return diffs.reduce((a, b) => a + b, 0) / diffs.length;
+    }
+
     function perturbParameter(currentValue, paramConfig, explorationFactor) { let { min, max, step, p_factor, type } = paramConfig; if (step <= 0) step = (type === 'int' ? 1 : 0.01); let effectivePFactor = p_factor * (1.0 + explorationFactor * 0.75); const range = max - min; let perturbation; if (Math.random() < (0.2 + explorationFactor * 0.5) || ((currentValue - min < range * 0.1 || max - currentValue < range * 0.1) && Math.random() < 0.25)) { perturbation = Math.max(step, range * random(0.05, 0.20 + explorationFactor * 0.15)); } else { perturbation = Math.max(step, Math.abs(currentValue * effectivePFactor)); } perturbation = Math.round(perturbation / step) * step; if (perturbation === 0 && step > 0) perturbation = step; let newValue = currentValue + (Math.random() < 0.5 ? -1 : 1) * perturbation; const precision = getPrecision(step); newValue = type === 'int' ? Math.round(newValue / step) * step : parseFloat((Math.round(newValue / step) * step).toFixed(precision)); return Math.max(min, Math.min(max, newValue)); }
     function ensureHealthParamConsistency(params) { const healthConfigs = [{ maxKey: 'preyMaxHealth', reproKey: 'preyHealthToReproduce', margin: 20 }, { maxKey: 'predatorMaxHealth', reproKey: 'predatorHealthToReproduce', margin: 20 }]; healthConfigs.forEach(hc => { const maxParamInfo = tunableParams.find(p => p.configKey === hc.maxKey); const reproParamInfo = tunableParams.find(p => p.configKey === hc.reproKey); if (!maxParamInfo || !reproParamInfo) return; let maxHealth = params[hc.maxKey]; let healthToRepro = params[hc.reproKey]; if (healthToRepro >= maxHealth - hc.margin) healthToRepro = maxHealth - hc.margin; healthToRepro = Math.max(reproParamInfo.min, Math.min(reproParamInfo.max, healthToRepro)); if (maxHealth < healthToRepro + hc.margin) maxHealth = healthToRepro + hc.margin; maxHealth = Math.max(maxParamInfo.min, Math.min(maxParamInfo.max, maxHealth)); if (healthToRepro >= maxHealth - hc.margin) { healthToRepro = maxHealth - hc.margin; healthToRepro = Math.max(reproParamInfo.min, Math.min(reproParamInfo.max, healthToRepro)); } params[hc.maxKey] = Math.round(maxHealth / maxParamInfo.step) * maxParamInfo.step; params[hc.reproKey] = Math.round(healthToRepro / reproParamInfo.step) * reproParamInfo.step; }); return params; }
 
     function suggestNextParameters() {
       let baseConfigForPerturbation;
-      const explorationFactor = Math.min(1.0, autoPilotStats.stagnationCounter / 15.0);
+      const normalizedGpVar = (gpOptimizer && gpOptimizer.GP_MAX_VARIANCE) ? autoPilotStats.lastGpVariance / gpOptimizer.GP_MAX_VARIANCE : 0;
+      const bnErrAvg = autoPilotStats.bnPredictionErrorAvg || 0;
+      const modelUncertainty = clamp((normalizedGpVar + bnErrAvg) / 2, 0, 1);
+      autoPilotStats.modelUncertainty = modelUncertainty;
+      const explorationFactor = clamp(autoPilotStats.stagnationCounter / 15 + modelUncertainty, 0, 1);
+      if (DOM_ELEMENTS.explorationFactorDisplay)
+        DOM_ELEMENTS.explorationFactorDisplay.textContent = explorationFactor.toFixed(2);
       const KAPPA_UCB = 1.0 + explorationFactor * 2.5;
 
       function getCandidateProportions(exp) {
@@ -3183,6 +3275,7 @@ function updateCurrentBNPredictionsDisplay() {
 
       candidates.sort((a, b) => b.score - a.score);
       const bestCandidate = candidates[0];
+      autoPilotStats.lastGpVariance = bestCandidate.debug_gp_variance;
 
       bnPredictionsForNextRun = {
         extinction: isBNReady() ? predictExtinctionProbabilities(bestCandidate.params) : { prey: 0.5, predator: 0.5, error: "BN not ready" },
@@ -3190,7 +3283,9 @@ function updateCurrentBNPredictionsDisplay() {
         starvationRisk: isBNReady() ? predictStarvationRiskProbabilities(bestCandidate.params) : { prey: 0.5, predator: 0.5, error: "BN not ready" },
       };
 
-      console.log(`Autopilot selected (Source: ${bestCandidate.source}). Top Score: ${bestCandidate.score.toFixed(0)}. BN Weight: ${BN_SCORE_WEIGHT.toFixed(2)} GPW:${GP_MEAN_WEIGHT.toFixed(2)} UCBW:${UCB_BONUS_WEIGHT.toFixed(2)}. Stagnation: ${autoPilotStats.stagnationCounter}, Exploration: ${explorationFactor.toFixed(2)}, Kappa: ${KAPPA_UCB.toFixed(2)}`);
+
+      console.log(`Autopilot selected (Source: ${bestCandidate.source}). Top Score: ${bestCandidate.score.toFixed(0)}. BN Weight: ${BN_SCORE_WEIGHT.toFixed(2)} GPW:${GP_MEAN_WEIGHT.toFixed(2)} UCBW:${UCB_BONUS_WEIGHT.toFixed(2)}. Stagnation: ${autoPilotStats.stagnationCounter}, ModelUncert: ${autoPilotStats.modelUncertainty.toFixed(2)}, Exploration: ${explorationFactor.toFixed(2)}, Kappa: ${KAPPA_UCB.toFixed(2)}`);
+
       console.log(`  GP Pred: Mean=${bestCandidate.debug_gp_mean.toFixed(0)}, Var=${bestCandidate.debug_gp_variance.toFixed(3)}. BN Comp: ${bestCandidate.debug_bn_component.toFixed(0)}`);
       if (bnPredictionsForNextRun.extinction && bnPredictionsForNextRun.growth && bnPredictionsForNextRun.starvationRisk) {
         console.log(`  BN Preds for chosen: ExtP:${bnPredictionsForNextRun.extinction.prey?.toFixed(3)} ExtR:${bnPredictionsForNextRun.extinction.predator?.toFixed(3)} | GrowPl:${bnPredictionsForNextRun.growth.plant?.toFixed(3)} GrowP:${bnPredictionsForNextRun.growth.prey?.toFixed(3)} GrowR:${bnPredictionsForNextRun.growth.predator?.toFixed(3)} | StarvP:${bnPredictionsForNextRun.starvationRisk.prey?.toFixed(3)} StarvR:${bnPredictionsForNextRun.starvationRisk.predator?.toFixed(3)}`);
@@ -3412,6 +3507,9 @@ function displayPastRunDetails(runIndex) {
         statsHtml += `<li>StarvRisk: P ${starvP?.prey?.toFixed(3) ?? 'N/A'}, R ${starvP?.predator?.toFixed(3) ?? 'N/A'} ${starvP?.error ? '(' + starvP.error.substring(0, 10) + '..)' : ''}</li>`;
         statsHtml += `</ul></li>`;
     } else statsHtml += ` N/A</li>`;
+    if (runData.bnPredictionError !== undefined) {
+        statsHtml += `<li><strong>BN Prediction Error:</strong> ${runData.bnPredictionError.toFixed(3)}</li>`;
+    }
     const duration = runData.durationFrames > 0 ? runData.durationFrames : 1;
     const plantBirthRate = statDetails.totalPlantBirths / duration;
     const plantConsumptionRate = statDetails.totalPlantsConsumed / duration;
@@ -3528,6 +3626,7 @@ function displayPastRunDetails(runIndex) {
       Object.keys(bnPredictionHistory).forEach(key => { // Clear BN prediction history
         if (key !== 'maxLength') bnPredictionHistory[key] = [];
       });
+      bnPredictionErrorHistory.errors = [];
       totalPlantBirths = 0; totalPlantsConsumed = 0;
       totalPreyDeathsByPredation = 0; totalPreyDeathsByStarvation = 0;
       totalPredatorDeathsByStarvation = 0; totalPredatorDeathsByMobbing = 0;
@@ -3993,6 +4092,17 @@ function displayPastRunDetails(runIndex) {
       }
     }
 
+    function drawBNPredictionErrorGraph() {
+      const yMax = 1.05;
+      const histories = [
+        { data: bnPredictionErrorHistory.errors, color: getComputedCssVar(CSS_VARS.GRAPH_BN_ERROR_COLOR), lineWidth: 1.5, label: 'Avg Abs Error' }
+      ];
+      drawGenericGraph(bnPredictionErrorGraphCtx, bnPredictionErrorGraphCanvas, histories, bnPredictionErrorHistory.maxLength, yMax, true);
+      if (DOM_ELEMENTS.bnPredictionErrorGraphLegend) {
+        populateGraphLegend('bnPredictionErrorGraphLegend', histories);
+      }
+    }
+
     // Modify drawGenericGraph to accept optional fixed yMax and y-axis scaling for probabilities
     function drawGenericGraph(graphCtxLocal, canvasLocal, histories, maxLength, fixedYMax = null, scaleYForProbability = false) {
       if (!canvasLocal || canvasLocal.width === 0 || canvasLocal.height === 0) return;
@@ -4092,7 +4202,7 @@ function displayPastRunDetails(runIndex) {
         'bnCurrentPreyStarvationRiskPrediction', 'bnCurrentPredStarvationRiskPrediction', // New DOM elements
         'planktonMode', 'preyKillPredatorsMode', 'showTargetLines', 'simulationSpeed', 'simulationSpeedValue',
         'exportRunsButton', 'importRunsFile', 'resetSimulation', 'autoPilotRun',
-        'pastRunsToggleMain', 'currentRunInfo', 'currentRunDisplay',
+        'pastRunsToggleMain', 'currentRunInfo', 'currentRunDisplay', 'explorationFactorDisplay',
         'backToSimulationButton', 'noPastRunsMessage', 'pastRunsSummaryList', 'pastRunDetails',
         'pastRunNumberDisplay', 'pastRunScoreDisplay', 'pastRunAutoPilotScoreDisplay',
         'pastRunParamsDisplay', 'pastRunStatsDisplay',
@@ -4103,6 +4213,7 @@ function displayPastRunDetails(runIndex) {
         'bnRunStartPredatorGrowthPrediction', 'bnRunStartPreyStarvationRiskPrediction',
         'bnRunStartPredStarvationRiskPrediction',
         'bnPredictionGraphCanvas', 'bnPredictionGraphLegend',
+        'bnPredictionErrorGraphCanvas', 'bnPredictionErrorGraphLegend',
         'pastBNPredictionGraphCanvas', 'pastBNPredictionGraphLegend',
         // Add new elements
       ];
@@ -4119,6 +4230,8 @@ function displayPastRunDetails(runIndex) {
 
       bnPredictionGraphCanvas = DOM_ELEMENTS.bnPredictionGraphCanvas; // Cache new canvas
       if (bnPredictionGraphCanvas) bnPredictionGraphCtx = bnPredictionGraphCanvas.getContext('2d'); // Get context
+      bnPredictionErrorGraphCanvas = DOM_ELEMENTS.bnPredictionErrorGraphCanvas;
+      if (bnPredictionErrorGraphCanvas) bnPredictionErrorGraphCtx = bnPredictionErrorGraphCanvas.getContext('2d');
       pastBNPredictionGraphCanvas = DOM_ELEMENTS.pastBNPredictionGraphCanvas;
       if (pastBNPredictionGraphCanvas) pastBNPredictionGraphCtx = pastBNPredictionGraphCanvas.getContext('2d');
       // Main view containers
@@ -4183,9 +4296,12 @@ function displayPastRunDetails(runIndex) {
           if (cumulativeGraphCanvas.clientHeight > 0) cumulativeGraphCanvas.height = cumulativeGraphCanvas.clientHeight;
           if (bnPredictionGraphCanvas && bnPredictionGraphCanvas.clientWidth > 0) bnPredictionGraphCanvas.width = bnPredictionGraphCanvas.clientWidth;
           if (bnPredictionGraphCanvas && bnPredictionGraphCanvas.clientHeight > 0) bnPredictionGraphCanvas.height = bnPredictionGraphCanvas.clientHeight;
+          if (bnPredictionErrorGraphCanvas && bnPredictionErrorGraphCanvas.clientWidth > 0) bnPredictionErrorGraphCanvas.width = bnPredictionErrorGraphCanvas.clientWidth;
+          if (bnPredictionErrorGraphCanvas && bnPredictionErrorGraphCanvas.clientHeight > 0) bnPredictionErrorGraphCanvas.height = bnPredictionErrorGraphCanvas.clientHeight;
           drawPopulationGraph();
           drawCumulativeGraph();
           if (bnPredictionGraphCanvas) drawBNPredictionGraph();
+          if (bnPredictionErrorGraphCanvas) drawBNPredictionErrorGraph();
         }
       } else { // If past runs view is active
         // Resize and redraw graphs in past run details view if visible
