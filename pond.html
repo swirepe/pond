@@ -570,6 +570,18 @@
         <div id="currentCumulativeGraphLegend" class="graph-legend"></div>
       </div>
       <div class="stat-subsection">
+        <h3>BN Predictions At Run Start (UI Params Only)</h3>
+        <div class="text-sm">P(Prey Extinct): <span id="bnRunStartPreyExtinctionPrediction">--</span></div>
+        <div class="text-sm">P(Predator Extinct): <span id="bnRunStartPredatorExtinctionPrediction">--</span></div>
+        <div class="text-sm">P(Plant Growth > Consumpt.): <span id="bnRunStartPlantGrowthPrediction">--</span></div>
+        <div class="text-sm">P(Prey Growth > Death): <span id="bnRunStartPreyGrowthPrediction">--</span></div>
+        <div class="text-sm">P(Predator Growth > Death): <span id="bnRunStartPredatorGrowthPrediction">--</span></div>
+        <div class="text-sm mt-1 pt-1 border-t border-[var(--ui-border-color)] border-opacity-30">P(Prey Starv. Risk):
+          <span id="bnRunStartPreyStarvationRiskPrediction">--</span>
+        </div>
+        <div class="text-sm">P(Pred Starv. Risk): <span id="bnRunStartPredStarvationRiskPrediction">--</span></div>
+      </div>
+      <div class="stat-subsection">
         <h3>BN Predictions (UI Params & Live Pop.)</h3>
         <div class="text-sm">P(Prey Extinct): <span id="bnCurrentPreyExtinctionPrediction">--</span></div>
         <div class="text-sm">P(Predator Extinct): <span id="bnCurrentPredatorExtinctionPrediction">--</span></div>
@@ -2640,6 +2652,7 @@ function updateCurrentBNPredictionsDisplay() {
           }
           drawPopulationGraph();
           drawCumulativeGraph();
+          updateRunStartBNPredictionsDisplay();
           updateCurrentBNPredictionsDisplay();
         }
       });
@@ -2750,6 +2763,7 @@ function updateCurrentBNPredictionsDisplay() {
       simulationTimeAccumulator = 0; // Reset for fixed step loop
 
       resetSimulation(); // Resets entities, populations, and history arrays
+      updateRunStartBNPredictionsDisplay(); // Show BN predictions for this run
       updateCurrentBNPredictionsDisplay(); // Update BN display for the *new* current parameters
 
       DOM_ELEMENTS.currentRunInfo.classList.add('visible');
@@ -3154,6 +3168,20 @@ function updateCurrentBNPredictionsDisplay() {
     }, ];
     drawSimplifiedGenericGraph(summaryGraphCtx, canvasEl, popHistories, runData.populationGraphHistory.maxLength);
 }
+
+    function updateRunStartBNPredictionsDisplay() {
+      if (!bnPredictionsForNextRun) return;
+      const ext = bnPredictionsForNextRun.extinction;
+      const grow = bnPredictionsForNextRun.growth;
+      const starv = bnPredictionsForNextRun.starvationRisk;
+      DOM_ELEMENTS.bnRunStartPreyExtinctionPrediction.textContent = ext && !ext.error ? ext.prey.toFixed(3) : 'N/A';
+      DOM_ELEMENTS.bnRunStartPredatorExtinctionPrediction.textContent = ext && !ext.error ? ext.predator.toFixed(3) : 'N/A';
+      DOM_ELEMENTS.bnRunStartPlantGrowthPrediction.textContent = grow && !grow.error ? grow.plant.toFixed(3) : 'N/A';
+      DOM_ELEMENTS.bnRunStartPreyGrowthPrediction.textContent = grow && !grow.error ? grow.prey.toFixed(3) : 'N/A';
+      DOM_ELEMENTS.bnRunStartPredatorGrowthPrediction.textContent = grow && !grow.error ? grow.predator.toFixed(3) : 'N/A';
+      DOM_ELEMENTS.bnRunStartPreyStarvationRiskPrediction.textContent = starv && !starv.error ? starv.prey.toFixed(3) : 'N/A';
+      DOM_ELEMENTS.bnRunStartPredStarvationRiskPrediction.textContent = starv && !starv.error ? starv.predator.toFixed(3) : 'N/A';
+    }
 
 function populatePastRunsSummaryList() {
     const summaryListDiv = DOM_ELEMENTS.pastRunsSummaryList;
@@ -3952,6 +3980,10 @@ function displayPastRunDetails(runIndex) {
         'pastRunParamsDisplay', 'pastRunStatsDisplay',
         'pastPopulationGraphLegend', 'pastCumulativeGraphLegend', 'bnLegend',
         'currentPopulationGraphLegend', 'currentCumulativeGraphLegend',
+        'bnRunStartPreyExtinctionPrediction', 'bnRunStartPredatorExtinctionPrediction',
+        'bnRunStartPlantGrowthPrediction', 'bnRunStartPreyGrowthPrediction',
+        'bnRunStartPredatorGrowthPrediction', 'bnRunStartPreyStarvationRiskPrediction',
+        'bnRunStartPredStarvationRiskPrediction',
         'bnPredictionGraphCanvas', 'bnPredictionGraphLegend',
         'pastBNPredictionGraphCanvas', 'pastBNPredictionGraphLegend',
         // Add new elements
@@ -4014,6 +4046,7 @@ function displayPastRunDetails(runIndex) {
         bnStarvPreds = predictStarvationRiskProbabilities(currentEffectiveConfig);
       }
       bnPredictionsForNextRun = { extinction: bnExtPreds, growth: bnGrowthPreds, starvationRisk: bnStarvPreds };
+      updateRunStartBNPredictionsDisplay();
       updateCurrentBNPredictionsDisplay(); // Show these predictions
 
       // Start the first run with the initial (potentially URL-modified) config
