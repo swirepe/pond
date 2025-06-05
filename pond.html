@@ -726,6 +726,7 @@
   <div id="currentRunInfo"
     style="position: absolute; top: 60px; left: 20px; color: var(--text-color); font-size: 0.9em; background-color: var(--ui-bg-color); padding: 5px 10px; border-radius: 5px; border: 1px solid var(--ui-border-color); opacity:0;">
     Current Run: <span id="currentRunDisplay">1</span>
+    &nbsp;| Exploration: <span id="explorationFactorDisplay">0.00</span>
   </div>
   </div>
 
@@ -916,6 +917,8 @@
       autoPilotStats.bnPredictionErrorAvg = 0;
       autoPilotStats.bnPredictionErrorCount = 0;
       autoPilotStats.modelUncertainty = 0;
+      if (DOM_ELEMENTS.explorationFactorDisplay)
+        DOM_ELEMENTS.explorationFactorDisplay.textContent = '0.00';
     }
 
     let simBayesianNetwork = null;
@@ -2968,6 +2971,8 @@ function updateCurrentBNPredictionsDisplay() {
       const modelUncertainty = clamp((normalizedGpVar + bnErrAvg) / 2, 0, 1);
       autoPilotStats.modelUncertainty = modelUncertainty;
       const explorationFactor = clamp(autoPilotStats.stagnationCounter / 15 + modelUncertainty, 0, 1);
+      if (DOM_ELEMENTS.explorationFactorDisplay)
+        DOM_ELEMENTS.explorationFactorDisplay.textContent = explorationFactor.toFixed(2);
       const KAPPA_UCB = 1.0 + explorationFactor * 2.5;
 
       const validRunsForBase = completedRuns
@@ -4051,7 +4056,7 @@ function displayPastRunDetails(runIndex) {
         'bnCurrentPreyStarvationRiskPrediction', 'bnCurrentPredStarvationRiskPrediction', // New DOM elements
         'planktonMode', 'preyKillPredatorsMode', 'showTargetLines', 'simulationSpeed', 'simulationSpeedValue',
         'exportRunsButton', 'importRunsFile', 'resetSimulation', 'autoPilotRun',
-        'pastRunsToggleMain', 'currentRunInfo', 'currentRunDisplay',
+        'pastRunsToggleMain', 'currentRunInfo', 'currentRunDisplay', 'explorationFactorDisplay',
         'backToSimulationButton', 'noPastRunsMessage', 'pastRunsSummaryList', 'pastRunDetails',
         'pastRunNumberDisplay', 'pastRunScoreDisplay', 'pastRunAutoPilotScoreDisplay',
         'pastRunParamsDisplay', 'pastRunStatsDisplay',
