@@ -2116,14 +2116,7 @@ function updateCurrentBNPredictionsDisplay() {
     config.preyVisionRadiusSq = config.preyVisionRadius * config.preyVisionRadius;
     config.predatorVisionRadiusSq = config.predatorVisionRadius * config.predatorVisionRadius;
 
-    const STORAGE_KEYS = {
-      SHOW_SPATIAL_GRID: 'showSpatialGrid'
-    };
 
-    function loadPersistentSettings() {
-      const storedGrid = localStorage.getItem(STORAGE_KEYS.SHOW_SPATIAL_GRID);
-      if (storedGrid !== null) config.showSpatialGrid = storedGrid === 'true';
-    }
 
     let allSliderControls = []; // To store info about sliders for easier updates
     // Parameters tunable by the autopilot
@@ -2974,10 +2967,8 @@ function updateCurrentBNPredictionsDisplay() {
       DOM_ELEMENTS.showTargetLines.checked = config.showTargetLines;
       DOM_ELEMENTS.showTargetLines.addEventListener('change', (e) => { config.showTargetLines = e.target.checked; });
       DOM_ELEMENTS.showSpatialGrid.checked = config.showSpatialGrid;
-      localStorage.setItem(STORAGE_KEYS.SHOW_SPATIAL_GRID, config.showSpatialGrid);
       DOM_ELEMENTS.showSpatialGrid.addEventListener('change', (e) => {
         config.showSpatialGrid = e.target.checked;
-        localStorage.setItem(STORAGE_KEYS.SHOW_SPATIAL_GRID, config.showSpatialGrid);
       });
 
       // Simulation Speed Slider
@@ -5153,7 +5144,6 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
       document.body.style.overflow = 'hidden'; // Default to hidden for sim view
 
       getUrlParams(); // Apply URL params like ?hue=...
-      loadPersistentSettings();
       initialConfigSnapshot = structuredClone(config); // Snapshot initial state for comparison
 
       setupControls(); // Initialize UI controls and their listeners
