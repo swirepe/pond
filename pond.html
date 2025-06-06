@@ -2198,7 +2198,49 @@ function updateCurrentBNPredictionsDisplay() {
     ];
 
     // --- Utility Functions ---
-    function getComputedCssVar(varName) { return getComputedStyle(document.documentElement).getPropertyValue(varName).trim(); }
+    const cssVarCache = {};
+    function rgbToHsl(r, g, b) {
+      r /= 255; g /= 255; b /= 255;
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      let h, s, l = (max + min) / 2;
+      if (max === min) { h = 0; s = 0; }
+      else {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        switch (max) {
+          case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+          case g: h = (b - r) / d + 2; break;
+          case b: h = (r - g) / d + 4; break;
+        }
+        h *= 60;
+      }
+      return { h: Math.round(h), s: Math.round(s * 100), l: Math.round(l * 100) };
+    }
+
+    function rgbStringToHslString(rgbStr) {
+      const m = rgbStr.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*(\d*\.?\d+))?\)/);
+      if (!m) return rgbStr;
+      const [, r, g, b, a] = m.map(Number);
+      const { h, s, l } = rgbToHsl(r, g, b);
+      if (m[4] !== undefined && a < 1) return `hsla(${h}, ${s}%, ${l}%, ${a})`;
+      return `hsl(${h}, ${s}%, ${l}%)`;
+    }
+
+    function getComputedCssVar(varName) {
+      const raw = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+      const cached = cssVarCache[varName];
+      if (cached && cached.raw === raw) return cached.val;
+      let val = raw;
+      if (raw.includes('calc(') || raw.includes('var(') || (raw.startsWith('hsl') && !parseHslString(raw))) {
+        const temp = document.createElement('div');
+        temp.style.color = `var(${varName})`;
+        document.body.appendChild(temp);
+        val = rgbStringToHslString(getComputedStyle(temp).color);
+        temp.remove();
+      }
+      cssVarCache[varName] = { raw, val };
+      return val;
+    }
     function getUrlParams() { const params = new URLSearchParams(window.location.search); config.hue = parseInt(params.get('hue')) || config.hue; config.headerText = params.get('header') || config.headerText; config.subheaderText = params.get('subheader') || config.subheaderText; document.documentElement.style.setProperty(CSS_VARS.BASE_HUE, config.hue); DOM_ELEMENTS.pageHeader.textContent = config.headerText; DOM_ELEMENTS.pageSubheader.textContent = config.subheaderText; }
     function random(min, max) { return Math.random() * (max - min) + min; }
     function randomInt(min, max) { return Math.floor(random(min, max + 1)); }
