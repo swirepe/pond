@@ -2116,6 +2116,15 @@ function updateCurrentBNPredictionsDisplay() {
     config.preyVisionRadiusSq = config.preyVisionRadius * config.preyVisionRadius;
     config.predatorVisionRadiusSq = config.predatorVisionRadius * config.predatorVisionRadius;
 
+    const STORAGE_KEYS = {
+      SHOW_SPATIAL_GRID: 'showSpatialGrid'
+    };
+
+    function loadPersistentSettings() {
+      const storedGrid = localStorage.getItem(STORAGE_KEYS.SHOW_SPATIAL_GRID);
+      if (storedGrid !== null) config.showSpatialGrid = storedGrid === 'true';
+    }
+
     let allSliderControls = []; // To store info about sliders for easier updates
     // Parameters tunable by the autopilot
     const tunableParams = [
@@ -2965,7 +2974,11 @@ function updateCurrentBNPredictionsDisplay() {
       DOM_ELEMENTS.showTargetLines.checked = config.showTargetLines;
       DOM_ELEMENTS.showTargetLines.addEventListener('change', (e) => { config.showTargetLines = e.target.checked; });
       DOM_ELEMENTS.showSpatialGrid.checked = config.showSpatialGrid;
-      DOM_ELEMENTS.showSpatialGrid.addEventListener('change', (e) => { config.showSpatialGrid = e.target.checked; });
+      localStorage.setItem(STORAGE_KEYS.SHOW_SPATIAL_GRID, config.showSpatialGrid);
+      DOM_ELEMENTS.showSpatialGrid.addEventListener('change', (e) => {
+        config.showSpatialGrid = e.target.checked;
+        localStorage.setItem(STORAGE_KEYS.SHOW_SPATIAL_GRID, config.showSpatialGrid);
+      });
 
       // Simulation Speed Slider
       const simSpeedSlider = DOM_ELEMENTS.simulationSpeed;
@@ -3202,6 +3215,7 @@ function updateCurrentBNPredictionsDisplay() {
       // Explicitly update boolean config flags if not covered by loop (e.g. if key wasn't in parametersToUse but in config)
       if (DOM_ELEMENTS.planktonMode) DOM_ELEMENTS.planktonMode.checked = config.planktonMode;
       if (DOM_ELEMENTS.preyKillPredatorsMode) DOM_ELEMENTS.preyKillPredatorsMode.checked = config.preyKillPredatorsMode;
+      if (DOM_ELEMENTS.showSpatialGrid) DOM_ELEMENTS.showSpatialGrid.checked = config.showSpatialGrid;
       if (DOM_ELEMENTS.simulationSpeed && DOM_ELEMENTS.simulationSpeedValue) {
         DOM_ELEMENTS.simulationSpeed.value = config.simulationSpeedMultiplier;
         DOM_ELEMENTS.simulationSpeedValue.textContent = config.simulationSpeedMultiplier.toFixed(1);
@@ -4324,6 +4338,15 @@ function displayPastRunDetails(runIndex) {
         ctx.save();
         ctx.strokeStyle = 'rgba(255,255,255,0.1)';
         ctx.lineWidth = 0.5;
+        ctx.fillStyle = 'rgba(255,255,255,0.05)';
+        spatialGrid.cells.forEach((cell, key) => {
+          if (cell.size > 0) {
+            const [xi, yi] = key.split(',').map(Number);
+            const x = xi * GRID_CELL_SIZE;
+            const y = yi * GRID_CELL_SIZE;
+            ctx.fillRect(x, y, GRID_CELL_SIZE, GRID_CELL_SIZE);
+          }
+        });
         for (let x = GRID_CELL_SIZE; x < canvas.width; x += GRID_CELL_SIZE) {
           ctx.beginPath();
           ctx.moveTo(x, 0);
@@ -5130,6 +5153,7 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
       document.body.style.overflow = 'hidden'; // Default to hidden for sim view
 
       getUrlParams(); // Apply URL params like ?hue=...
+      loadPersistentSettings();
       initialConfigSnapshot = structuredClone(config); // Snapshot initial state for comparison
 
       setupControls(); // Initialize UI controls and their listeners
