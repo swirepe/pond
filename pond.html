@@ -940,6 +940,7 @@
     const bnPredictionHistory = { // New history object for BN predictions
       preyExtinctionProb: [],
       predatorExtinctionProb: [],
+      favorableGrowthPlantProb: [],
       favorableGrowthPreyProb: [],
       favorableGrowthPredatorProb: [],
       maxLength: 200
@@ -3752,6 +3753,7 @@ function displayPastRunDetails(runIndex) {
         const bnHistories = [
             { data: runData.bnPredictionGraphHistory.preyExtinctionProb || [], color: getComputedCssVar(CSS_VARS.PREY_COLOR), lineWidth: 1.5, label: "P(Prey Extinct)" },
             { data: runData.bnPredictionGraphHistory.predatorExtinctionProb || [], color: getComputedCssVar(CSS_VARS.PREDATOR_COLOR), lineWidth: 1.5, label: "P(Pred Extinct)" },
+            { data: runData.bnPredictionGraphHistory.favorableGrowthPlantProb || [], color: modifyHslColor(getComputedCssVar(CSS_VARS.PLANT_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Plant Growth)" },
             { data: runData.bnPredictionGraphHistory.favorableGrowthPreyProb || [], color: modifyHslColor(getComputedCssVar(CSS_VARS.PREY_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Prey Growth)" },
             { data: runData.bnPredictionGraphHistory.favorableGrowthPredatorProb || [], color: modifyHslColor(getComputedCssVar(CSS_VARS.PREDATOR_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Pred Growth)" }
         ];
@@ -4146,9 +4148,11 @@ function displayPastRunDetails(runIndex) {
                 bnPredictionHistory.predatorExtinctionProb.push(0.5);
             }
             if (!growthPredsHist.error) {
+                bnPredictionHistory.favorableGrowthPlantProb.push(growthPredsHist.plant);
                 bnPredictionHistory.favorableGrowthPreyProb.push(growthPredsHist.prey);
                 bnPredictionHistory.favorableGrowthPredatorProb.push(growthPredsHist.predator);
             } else {
+                bnPredictionHistory.favorableGrowthPlantProb.push(0.5);
                 bnPredictionHistory.favorableGrowthPreyProb.push(0.5);
                 bnPredictionHistory.favorableGrowthPredatorProb.push(0.5);
             }
@@ -4512,6 +4516,7 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
       const histories = [
         { data: bnPredictionHistory.preyExtinctionProb, color: getComputedCssVar(CSS_VARS.PREY_COLOR), lineWidth: 1.5, label: "P(Prey Extinct)", visible: true },
         { data: bnPredictionHistory.predatorExtinctionProb, color: getComputedCssVar(CSS_VARS.PREDATOR_COLOR), lineWidth: 1.5, label: "P(Pred Extinct)", visible: true },
+        { data: bnPredictionHistory.favorableGrowthPlantProb, color: modifyHslColor(getComputedCssVar(CSS_VARS.PLANT_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Plant Growth)", visible: true },
         { data: bnPredictionHistory.favorableGrowthPreyProb, color: modifyHslColor(getComputedCssVar(CSS_VARS.PREY_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Prey Growth)", visible: true },
         { data: bnPredictionHistory.favorableGrowthPredatorProb, color: modifyHslColor(getComputedCssVar(CSS_VARS.PREDATOR_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Pred Growth)", visible: true } // Lighter pred color
       ];
