@@ -762,6 +762,7 @@
       <label for="preyKillPredatorsMode"><input type="checkbox" id="preyKillPredatorsMode"> Prey Can Kill
         Predators</label>
       <label for="showTargetLines"><input type="checkbox" id="showTargetLines"> Show Target Lines</label>
+      <label for="showSpatialGrid"><input type="checkbox" id="showSpatialGrid"> Show Quadtree Grid</label>
       <label for="simulationSpeed" class="mt-2">Sim Speed: <span id="simulationSpeedValue">1.0</span>x</label>
       <input type="range" id="simulationSpeed" min="0.1" max="20.0" value="1.0" step="0.1">
     </div>
@@ -959,6 +960,56 @@
     let plants = [];
     let prey = [];
     let predators = [];
+
+    const GRID_CELL_SIZE = 50;
+    const spatialGrid = {
+      cells: new Map(),
+      key(xi, yi) { return `${xi},${yi}`; },
+      getCellCoords(x, y) { return [Math.floor(x / GRID_CELL_SIZE), Math.floor(y / GRID_CELL_SIZE)]; },
+      add(entity) {
+        const [xi, yi] = this.getCellCoords(entity.pos.x, entity.pos.y);
+        const k = this.key(xi, yi);
+        if (!this.cells.has(k)) this.cells.set(k, new Set());
+        this.cells.get(k).add(entity);
+        entity._gridKey = k;
+      },
+      update(entity) {
+        const [xi, yi] = this.getCellCoords(entity.pos.x, entity.pos.y);
+        const k = this.key(xi, yi);
+        if (entity._gridKey === k) return;
+        this.remove(entity);
+        if (!this.cells.has(k)) this.cells.set(k, new Set());
+        this.cells.get(k).add(entity);
+        entity._gridKey = k;
+      },
+      remove(entity) {
+        if (!entity._gridKey) return;
+        const cell = this.cells.get(entity._gridKey);
+        if (cell) {
+          cell.delete(entity);
+          if (cell.size === 0) this.cells.delete(entity._gridKey);
+        }
+        entity._gridKey = null;
+      },
+      clear() { this.cells.clear(); },
+      query(x, y, radius) {
+        const [xi, yi] = this.getCellCoords(x, y);
+        const range = Math.ceil(radius / GRID_CELL_SIZE);
+        const results = [];
+        for (let dx = -range; dx <= range; dx++) {
+          for (let dy = -range; dy <= range; dy++) {
+            const key = this.key(xi + dx, yi + dy);
+            const cell = this.cells.get(key);
+            if (cell) cell.forEach(e => results.push(e));
+          }
+        }
+        return results;
+      }
+    };
+
+    function addPlant(p) { plants.push(p); spatialGrid.add(p); }
+    function addPreyEntity(p) { prey.push(p); spatialGrid.add(p); }
+    function addPredatorEntity(p) { predators.push(p); spatialGrid.add(p); }
 
     let animationFrameId;
     let lastTimestamp = 0;
@@ -2058,6 +2109,7 @@ function updateCurrentBNPredictionsDisplay() {
       // Interaction & Visuals
       preyKillPredatorsMode: false, preyMinGroupToAttack: 3, preyGroupKillDuration: 180, // frames
       showTargetLines: true,
+      showSpatialGrid: false,
       birthAnimationDuration: 45, // frames
       deathAnimationDuration: 60, // frames
     };
@@ -2204,6 +2256,7 @@ function updateCurrentBNPredictionsDisplay() {
             this.animationProgress = 0;
             break;
           case 'dead':
+            spatialGrid.remove(this);
             return false; // Indicates entity should be removed
         }
 
@@ -2226,6 +2279,7 @@ function updateCurrentBNPredictionsDisplay() {
           this.vel.limit(this.maxSpeed);
           this.pos.add(this.vel);
           this.keepInBounds();
+          spatialGrid.update(this);
         }
         return true; // Still in simulation
       }
@@ -2253,7 +2307,9 @@ function updateCurrentBNPredictionsDisplay() {
         newY = Math.max(newPlantRadius, Math.min(canvas.height - newPlantRadius, newY));
 
         let overlaps = false;
-        for (const p of plants) {
+        const nearby = spatialGrid.query(newX, newY, newPlantRadius + separationMargin);
+        for (const p of nearby) {
+          if (p.type !== 'plant') continue;
           if (distanceSq(newX, newY, p.pos.x, p.pos.y) < (newPlantRadius + p.radius + separationMargin) ** 2) {
             overlaps = true;
             break;
@@ -2311,8 +2367,10 @@ function updateCurrentBNPredictionsDisplay() {
 
         if (this.animationState === 'alive' && Math.random() < config.plantReproduceRate && plants.length < config.maxEntities * 0.6) {
           let nearbyPlantsInArea = 0;
-          for (const otherPlant of plants) {
-            if (otherPlant !== this && distanceSq(this.pos.x, this.pos.y, otherPlant.pos.x, otherPlant.pos.y) < config.plantMaxDensityRadius * config.plantMaxDensityRadius) {
+          const nearbyPlants = spatialGrid.query(this.pos.x, this.pos.y, config.plantMaxDensityRadius);
+          for (const otherPlant of nearbyPlants) {
+            if (otherPlant.type !== 'plant' || otherPlant === this) continue;
+            if (distanceSq(this.pos.x, this.pos.y, otherPlant.pos.x, otherPlant.pos.y) < config.plantMaxDensityRadius * config.plantMaxDensityRadius) {
               nearbyPlantsInArea++;
             }
           }
@@ -2322,7 +2380,7 @@ function updateCurrentBNPredictionsDisplay() {
             const spot = findNonOverlappingSpot(this.pos, config.plantSpawnSearchDist, config.plantSpawnMaxAttempts, newPlantObj.radius, config.plantSpawnSeparationMargin);
             if (spot) {
               const newPlant = new Plant(spot.x, spot.y);
-              plants.push(newPlant);
+              addPlant(newPlant);
               totalPlantBirths++;
             }
           }
@@ -2404,8 +2462,30 @@ function updateCurrentBNPredictionsDisplay() {
       getEffectiveAgility(baseMultiplier = 1.0) { return (this.agility * baseMultiplier) / (1 + this.inertiaEffectStrength * this.vel.mag()); }
       seek(targetPos) { const desired = new Vector(targetPos.x - this.pos.x, targetPos.y - this.pos.y); if (desired.magSq() === 0) return new Vector(0, 0); desired.normalize().mult(this.maxSpeed); const steer = new Vector(desired.x - this.vel.x, desired.y - this.vel.y); steer.limit(this.getEffectiveAgility()); return steer; }
       flee(targetPos) { const desired = new Vector(this.pos.x - targetPos.x, this.pos.y - targetPos.y); if (desired.magSq() === 0) return Vector.random2D().mult(this.getEffectiveAgility(1.5)); desired.normalize().mult(this.maxSpeed); const steer = new Vector(desired.x - this.vel.x, desired.y - this.vel.y); steer.limit(this.getEffectiveAgility(1.5)); return steer; }
-      findFood() { let closestFood = null, closestDistSq = Infinity; const visionRadiusSq = config.preyVisionRadiusSq; for (const plant of plants) { if (plant.health <= 0 || plant.animationState === 'dying' || plant.animationState === 'dead') continue; const dSq = distanceSq(this.pos.x, this.pos.y, plant.pos.x, plant.pos.y); if (dSq < closestDistSq && dSq < visionRadiusSq) { closestDistSq = dSq; closestFood = plant; } } return closestFood; }
-      findPredator() { let closestPredator = null, closestDistSq = Infinity; const visionRadiusSq = config.preyVisionRadiusSq * (0.75 * 0.75); for (const predator of predators) { if (predator.animationState === 'dying' || predator.animationState === 'dead') continue; const dSq = distanceSq(this.pos.x, this.pos.y, predator.pos.x, predator.pos.y); if (dSq < closestDistSq && dSq < visionRadiusSq) { closestDistSq = dSq; closestPredator = predator; } } return closestPredator; }
+      findFood() {
+        let closestFood = null, closestDistSq = Infinity;
+        const visionRadius = config.preyVisionRadius;
+        const visionRadiusSq = config.preyVisionRadiusSq;
+        for (const ent of spatialGrid.query(this.pos.x, this.pos.y, visionRadius)) {
+          if (ent.type !== 'plant') continue;
+          if (ent.health <= 0 || ent.animationState === 'dying' || ent.animationState === 'dead') continue;
+          const dSq = distanceSq(this.pos.x, this.pos.y, ent.pos.x, ent.pos.y);
+          if (dSq < closestDistSq && dSq < visionRadiusSq) { closestDistSq = dSq; closestFood = ent; }
+        }
+        return closestFood;
+      }
+      findPredator() {
+        let closestPredator = null, closestDistSq = Infinity;
+        const visionRadius = config.preyVisionRadius * 0.75;
+        const visionRadiusSq = visionRadius * visionRadius;
+        for (const ent of spatialGrid.query(this.pos.x, this.pos.y, visionRadius)) {
+          if (ent.type !== 'predator') continue;
+          if (ent.animationState === 'dying' || ent.animationState === 'dead') continue;
+          const dSq = distanceSq(this.pos.x, this.pos.y, ent.pos.x, ent.pos.y);
+          if (dSq < closestDistSq && dSq < visionRadiusSq) { closestDistSq = dSq; closestPredator = ent; }
+        }
+        return closestPredator;
+      }
 
       update() {
         if (!super.update()) return false; // Base handles animation state
@@ -2501,7 +2581,7 @@ function updateCurrentBNPredictionsDisplay() {
           this.health -= config.preyReproductionCost;
           const offspring = new Prey(this.pos.x + random(-5, 5), this.pos.y + random(-5, 5));
           offspring.health = config.preyHealth / 2;
-          prey.push(offspring);
+          addPreyEntity(offspring);
           totalPreyBirths++;
           this.reproductionCooldown = config.preyReproductionCooldown;
         }
@@ -2642,7 +2722,18 @@ function updateCurrentBNPredictionsDisplay() {
       getEffectiveAgility(baseMultiplier = 1.0) { return (this.agility * baseMultiplier) / (1 + this.inertiaEffectStrength * this.vel.mag()); }
       seek(targetPos) { const desired = new Vector(targetPos.x - this.pos.x, targetPos.y - this.pos.y); if (desired.magSq() === 0) return new Vector(0, 0); desired.normalize().mult(this.maxSpeed); const steer = new Vector(desired.x - this.vel.x, desired.y - this.vel.y); steer.limit(this.getEffectiveAgility()); return steer; }
       flee(targetPos) { const desired = new Vector(this.pos.x - targetPos.x, this.pos.y - targetPos.y); if (desired.magSq() === 0) return Vector.random2D().mult(this.getEffectiveAgility(1.2)); desired.normalize().mult(this.maxSpeed); const steer = new Vector(desired.x - this.vel.x, desired.y - this.vel.y); steer.limit(this.getEffectiveAgility(1.2)); return steer; }
-      findFood() { let closestFood = null, closestDistSq = Infinity; const visionRadiusSq = config.predatorVisionRadiusSq; for (const p of prey) { if (p.animationState === 'dying' || p.animationState === 'dead') continue; const dSq = distanceSq(this.pos.x, this.pos.y, p.pos.x, p.pos.y); if (dSq < closestDistSq && dSq < visionRadiusSq) { closestDistSq = dSq; closestFood = p; } } return closestFood; }
+      findFood() {
+        let closestFood = null, closestDistSq = Infinity;
+        const visionRadius = config.predatorVisionRadius;
+        const visionRadiusSq = config.predatorVisionRadiusSq;
+        for (const ent of spatialGrid.query(this.pos.x, this.pos.y, visionRadius)) {
+          if (ent.type !== 'prey') continue;
+          if (ent.animationState === 'dying' || ent.animationState === 'dead') continue;
+          const dSq = distanceSq(this.pos.x, this.pos.y, ent.pos.x, ent.pos.y);
+          if (dSq < closestDistSq && dSq < visionRadiusSq) { closestDistSq = dSq; closestFood = ent; }
+        }
+        return closestFood;
+      }
 
       update() {
         if (!super.update()) return false;
@@ -2747,7 +2838,7 @@ function updateCurrentBNPredictionsDisplay() {
           this.health -= config.predatorReproductionCost;
           const offspring = new Predator(this.pos.x + random(-5, 5), this.pos.y + random(-5, 5));
           offspring.health = config.predatorHealth / 2;
-          predators.push(offspring);
+          addPredatorEntity(offspring);
           totalPredatorBirths++;
           this.reproductionCooldown = config.predatorReproductionCooldown;
         }
@@ -2873,6 +2964,8 @@ function updateCurrentBNPredictionsDisplay() {
       DOM_ELEMENTS.preyKillPredatorsMode.addEventListener('change', (e) => { config.preyKillPredatorsMode = e.target.checked; updateCurrentBNPredictionsDisplay(); });
       DOM_ELEMENTS.showTargetLines.checked = config.showTargetLines;
       DOM_ELEMENTS.showTargetLines.addEventListener('change', (e) => { config.showTargetLines = e.target.checked; });
+      DOM_ELEMENTS.showSpatialGrid.checked = config.showSpatialGrid;
+      DOM_ELEMENTS.showSpatialGrid.addEventListener('change', (e) => { config.showSpatialGrid = e.target.checked; });
 
       // Simulation Speed Slider
       const simSpeedSlider = DOM_ELEMENTS.simulationSpeed;
@@ -3913,6 +4006,7 @@ function displayPastRunDetails(runIndex) {
 
     function resetSimulation() {
       plants = []; prey = []; predators = []; entities = [];
+      spatialGrid.clear();
       Object.keys(populationHistory).forEach(key => { if (key !== 'maxLength') populationHistory[key] = []; });
       Object.keys(cumulativeHistory).forEach(key => { if (key !== 'maxLength') cumulativeHistory[key] = []; });
       Object.keys(bnPredictionHistory).forEach(key => { // Clear BN prediction history
@@ -3946,7 +4040,9 @@ function displayPastRunDetails(runIndex) {
           const candidateX = random(newPlantRadius, canvas.width - newPlantRadius);
           const candidateY = random(newPlantRadius, canvas.height - newPlantRadius);
           let overlaps = false;
-          for (const p of plants) { // Check against already placed plants
+          const nearby = spatialGrid.query(candidateX, candidateY, newPlantRadius + config.plantSpawnSeparationMargin);
+          for (const p of nearby) {
+            if (p.type !== 'plant') continue;
             if (distanceSq(candidateX, candidateY, p.pos.x, p.pos.y) < (newPlantRadius + p.radius + config.plantSpawnSeparationMargin) ** 2) {
               overlaps = true;
               break;
@@ -3959,7 +4055,7 @@ function displayPastRunDetails(runIndex) {
         }
 
         if (spot) {
-          plants.push(new Plant(spot.x, spot.y));
+          addPlant(new Plant(spot.x, spot.y));
           placedPlantsCount++;
         } else {
           // console.warn(`Could not place initial plant ${i+1} with sufficient separation after ${MAX_INITIAL_PLACEMENT_ATTEMPTS} attempts. Target: ${config.initialPlants}, Placed: ${placedPlantsCount}`);
@@ -3973,8 +4069,8 @@ function displayPastRunDetails(runIndex) {
       if (placedPlantsCount < config.initialPlants) {
         // console.log(`Successfully placed ${placedPlantsCount} out of ${config.initialPlants} requested initial plants with separation.`);
       }
-      for (let i = 0; i < config.initialPrey; i++) prey.push(new Prey(random(0, canvas.width), random(0, canvas.height)));
-      for (let i = 0; i < config.initialPredators; i++) predators.push(new Predator(random(0, canvas.width), random(0, canvas.height)));
+      for (let i = 0; i < config.initialPrey; i++) addPreyEntity(new Prey(random(0, canvas.width), random(0, canvas.height)));
+      for (let i = 0; i < config.initialPredators; i++) addPredatorEntity(new Predator(random(0, canvas.width), random(0, canvas.height)));
     }
 
     function updateEntities() {
@@ -4223,6 +4319,25 @@ function displayPastRunDetails(runIndex) {
       plants.forEach(p => p.draw());
       prey.forEach(p => p.draw());
       predators.forEach(p => p.draw());
+
+      if (config.showSpatialGrid) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+        ctx.lineWidth = 0.5;
+        for (let x = GRID_CELL_SIZE; x < canvas.width; x += GRID_CELL_SIZE) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, canvas.height);
+          ctx.stroke();
+        }
+        for (let y = GRID_CELL_SIZE; y < canvas.height; y += GRID_CELL_SIZE) {
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(canvas.width, y);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
 
       if (config.showTargetLines) {
         ctx.save();
@@ -4949,7 +5064,7 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
         'bnCurrentPreyExtinctionPrediction', 'bnCurrentPredatorExtinctionPrediction',
         'bnCurrentPlantGrowthPrediction', 'bnCurrentPreyGrowthPrediction', 'bnCurrentPredatorGrowthPrediction',
         'bnCurrentPreyStarvationRiskPrediction', 'bnCurrentPredStarvationRiskPrediction', // New DOM elements
-        'planktonMode', 'preyKillPredatorsMode', 'showTargetLines', 'simulationSpeed', 'simulationSpeedValue',
+        'planktonMode', 'preyKillPredatorsMode', 'showTargetLines', 'showSpatialGrid', 'simulationSpeed', 'simulationSpeedValue',
         'exportRunsButton', 'importRunsFile', 'resetSimulation', 'autoPilotRun',
         'pastRunsToggleMain', 'currentRunInfo', 'currentRunDisplay', 'explorationFactorDisplay',
         'autoPilotLastScoreDisplay', 'autoPilotBestScoreDisplay', 'bnErrorAvgDisplay',
