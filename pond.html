@@ -2029,6 +2029,22 @@ function updateCurrentBNPredictionsDisplay() {
       return `hsl(${h}, ${s}%, ${l}%)`;
     }
 
+    function easeOutQuad(t) {
+      return t * (2 - t);
+    }
+
+    function drawRipple(x, y, progress, baseColor) {
+      const rippleRadius = 8 + progress * 20;
+      ctx.save();
+      ctx.globalAlpha = (1 - progress) * 0.5;
+      ctx.beginPath();
+      ctx.arc(x, y, rippleRadius, 0, Math.PI * 2);
+      ctx.strokeStyle = modifyHslColor(baseColor, 1.0, 1.2, ctx.globalAlpha);
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.restore();
+    }
+
 
     // --- Vector & Entity Classes ---
     class Vector { constructor(x = 0, y = 0) { this.x = x; this.y = y; } add(v) { this.x += v.x; this.y += v.y; return this; } sub(v) { this.x -= v.x; this.y -= v.y; return this; } mult(s) { this.x *= s; this.y *= s; return this; } div(s) { if (s !== 0) { this.x /= s; this.y /= s; } return this; } mag() { return Math.sqrt(this.x * this.x + this.y * this.y); } magSq() { return this.x * this.x + this.y * this.y; } normalize() { const m = this.mag(); if (m > 0) this.div(m); return this; } limit(max) { if (this.magSq() > max * max) { this.normalize().mult(max); } return this; } static random2D() { return new Vector(random(-1, 1), random(-1, 1)).normalize(); } angle() { return Math.atan2(this.y, this.x); } clone() { return new Vector(this.x, this.y); } angleBetween(vOther) { if (this.magSq() === 0 || vOther.magSq() === 0) return 0; const dot = this.x * vOther.x + this.y * vOther.y; const cosTheta = dot / (this.mag() * vOther.mag()); return Math.acos(Math.max(-1, Math.min(1, cosTheta))); } }
@@ -2222,16 +2238,22 @@ function updateCurrentBNPredictionsDisplay() {
           const rampUpDuration = 0.5;
 
           if (birthProgress < rampUpDuration) {
-            scaleFactor = initialScale + (peakScale - initialScale) * (birthProgress / rampUpDuration);
+            const eased = easeOutQuad(birthProgress / rampUpDuration);
+            scaleFactor = initialScale + (peakScale - initialScale) * eased;
             const flashProgress = birthProgress / rampUpDuration;
             const L_boost = 30 * (1 - flashProgress);
             const S_boost_factor = 1 + 0.3 * (1 - flashProgress);
             finalColor = modifyHslColor(this.baseColor, S_boost_factor, 1 + (L_boost / 100));
           } else {
-            scaleFactor = peakScale - (peakScale - finalScale) * ((birthProgress - rampUpDuration) / (1 - rampUpDuration));
+            const eased = easeOutQuad((birthProgress - rampUpDuration) / (1 - rampUpDuration));
+            scaleFactor = peakScale - (peakScale - finalScale) * eased;
             finalColor = this.baseColor;
           }
           alphaFactor = 0.2 + 0.8 * Math.min(1, birthProgress * 2.0);
+          drawRipple(this.pos.x, this.pos.y, birthProgress, this.baseColor);
+        } else if (this.animationState === 'alive') {
+          const breath = 1 + 0.05 * Math.sin((currentRunFrameCounter + parseInt(this.id.slice(-5),36)) / 20);
+          scaleFactor *= breath;
         } else if (this.animationState === 'dying') {
           const deathProgress = this.animationProgress;
           scaleFactor = Math.max(0, 1 - deathProgress);
@@ -2267,6 +2289,9 @@ function updateCurrentBNPredictionsDisplay() {
         this.reproductionCooldown = 0;
         this.isAttackingPredatorTarget = null;
 
+        this.lastHealth = this.health;
+        this.flinchTimer = 0;
+
         this.animationState = 'birthing';
         this.birthAnimTimer = config.birthAnimationDuration;
         this.animationProgress = 0;
@@ -2296,6 +2321,9 @@ function updateCurrentBNPredictionsDisplay() {
         if (this.reproductionCooldown > 0) this.reproductionCooldown--;
         this.health -= config.preyHungerRate;
         this.health = Math.min(this.health, config.preyMaxHealth);
+        if (this.health < this.lastHealth) this.flinchTimer = 5;
+        this.lastHealth = this.health;
+        if (this.flinchTimer > 0) this.flinchTimer--;
 
         let steeringForce = new Vector(0, 0);
         const nearbyPredator = this.findPredator();
@@ -2381,6 +2409,8 @@ function updateCurrentBNPredictionsDisplay() {
         let scaleFactor = 1.0, alphaFactor = 1.0;
         let dynamicStrokeColor = this.color;
         let birthProgress = 0, deathProgress = 0;
+        const orientation = this.vel.magSq() > 0.001 ? this.vel.angle() : 0;
+        const orientation = this.vel.magSq() > 0.001 ? this.vel.angle() : 0;
 
         if (this.animationState === 'dying') {
           deathProgress = this.animationProgress;
@@ -2394,25 +2424,39 @@ function updateCurrentBNPredictionsDisplay() {
           const initialScale = 0.1, peakScale = 1.4, finalScale = 1.0;
           const rampUpDuration = 0.5;
           if (birthProgress < rampUpDuration) {
-            scaleFactor = initialScale + (peakScale - initialScale) * (birthProgress / rampUpDuration);
+            const eased = easeOutQuad(birthProgress / rampUpDuration);
+            scaleFactor = initialScale + (peakScale - initialScale) * eased;
             const flashProgress = birthProgress / rampUpDuration;
             dynamicStrokeColor = modifyHslColor(this.baseColor, 1 + 0.4 * (1 - flashProgress), 1 + 0.2 * (1 - flashProgress));
           } else {
-            scaleFactor = peakScale - (peakScale - finalScale) * ((birthProgress - rampUpDuration) / (1 - rampUpDuration));
+            const eased = easeOutQuad((birthProgress - rampUpDuration) / (1 - rampUpDuration));
+            scaleFactor = peakScale - (peakScale - finalScale) * eased;
             dynamicStrokeColor = this.color;
           }
           alphaFactor = 0.2 + 0.8 * Math.min(1, birthProgress * 2.0);
+          drawRipple(this.pos.x, this.pos.y, birthProgress, this.baseColor);
+        } else if (this.animationState === 'alive') {
+          const breath = 1 + 0.05 * Math.sin((currentRunFrameCounter + parseInt(this.id.slice(-5),36)) / 20);
+          scaleFactor *= breath;
+          if (this.flinchTimer > 0) scaleFactor *= 1 + 0.1 * (this.flinchTimer / 5);
+          const healthRatio = clamp(this.health / config.preyMaxHealth, 0, 1);
+          dynamicStrokeColor = modifyHslColor(dynamicStrokeColor, 1 - 0.3 * (1 - healthRatio), 1 - 0.2 * (1 - healthRatio));
         }
 
         ctx.globalAlpha = alphaFactor;
         const currentRadius = this.radius * scaleFactor;
 
         if (currentRadius > 0.1 && alphaFactor > 0.01) {
+          ctx.save();
+          ctx.translate(this.pos.x, this.pos.y);
+          ctx.rotate(orientation);
+          ctx.scale(1.2, 1);
           ctx.beginPath();
-          ctx.arc(this.pos.x, this.pos.y, currentRadius, 0, Math.PI * 2);
+          ctx.arc(0, 0, currentRadius, 0, Math.PI * 2);
           ctx.strokeStyle = dynamicStrokeColor;
           ctx.lineWidth = 2;
           ctx.stroke();
+          ctx.restore();
 
           if (this.animationState !== 'dying' && alphaFactor > 0.1 && scaleFactor > 0.25) {
             const healthPercentage = Math.max(0, this.health / config.preyMaxHealth);
@@ -2446,6 +2490,7 @@ function updateCurrentBNPredictionsDisplay() {
         }
 
         if (this.animationState === 'dying' && deathProgress > 0.05 && deathProgress < 0.95) {
+          drawRipple(this.pos.x, this.pos.y, deathProgress, this.baseColor);
           const numFragments = 3 + Math.floor(Math.random() * 2);
           const fragmentBaseMaxRadius = this.radius * 0.3;
           for (let i = 0; i < numFragments; i++) {
@@ -2455,7 +2500,7 @@ function updateCurrentBNPredictionsDisplay() {
             const fragX = this.pos.x + Math.cos(fragmentAngle) * this.radius * 0.15 * outwardPushFactor;
             const fragY = this.pos.y + Math.sin(fragmentAngle) * this.radius * 0.15 * outwardPushFactor;
             const fragmentRadius = fragmentBaseMaxRadius * Math.max(0, (1 - deathProgress * 1.1)) * (0.4 + ((randomSeedForFrag * 13) % 100) / 100 * 0.6);
-            const fragmentSpecificAlphaMod = (0.7 - deathProgress * 0.6) * (0.5 + ((randomSeedForFrag * 7) % 100) / 100 * 0.5);
+            const fragmentSpecificAlphaMod = (0.7 - deathProgress * 0.6) * (0.5 + ((randomSeedForFrag * 7) % 100) / 100 * 0.5) * (1 - deathProgress);
             if (fragmentRadius > 0.5 && fragmentSpecificAlphaMod * alphaFactor > 0.05) {
               ctx.beginPath(); ctx.arc(fragX, fragY, fragmentRadius, 0, Math.PI * 2);
               ctx.fillStyle = modifyHslColor(this.baseColor, 0.4, 1.2, fragmentSpecificAlphaMod * alphaFactor);
@@ -2482,6 +2527,9 @@ function updateCurrentBNPredictionsDisplay() {
         this.reproductionCooldown = 0;
         this.attackedByPreyTimer = 0;
         this.preyAttackers = new Set();
+
+        this.lastHealth = this.health;
+        this.flinchTimer = 0;
 
         this.animationState = 'birthing';
         this.birthAnimTimer = config.birthAnimationDuration;
@@ -2511,6 +2559,9 @@ function updateCurrentBNPredictionsDisplay() {
         if (this.reproductionCooldown > 0) this.reproductionCooldown--;
         this.health -= config.predatorHungerRate;
         this.health = Math.min(this.health, config.predatorMaxHealth);
+        if (this.health < this.lastHealth) this.flinchTimer = 5;
+        this.lastHealth = this.health;
+        if (this.flinchTimer > 0) this.flinchTimer--;
 
         let steeringForce = new Vector(0, 0);
         let isFleeingMob = false;
@@ -2618,25 +2669,39 @@ function updateCurrentBNPredictionsDisplay() {
           const initialScale = 0.1, peakScale = 1.4, finalScale = 1.0;
           const rampUpDuration = 0.5;
           if (birthProgress < rampUpDuration) {
-            scaleFactor = initialScale + (peakScale - initialScale) * (birthProgress / rampUpDuration);
+            const eased = easeOutQuad(birthProgress / rampUpDuration);
+            scaleFactor = initialScale + (peakScale - initialScale) * eased;
             const flashProgress = birthProgress / rampUpDuration;
             dynamicStrokeColor = modifyHslColor(this.baseColor, 1 + 0.4 * (1 - flashProgress), 1 + 0.2 * (1 - flashProgress));
           } else {
-            scaleFactor = peakScale - (peakScale - finalScale) * ((birthProgress - rampUpDuration) / (1 - rampUpDuration));
+            const eased = easeOutQuad((birthProgress - rampUpDuration) / (1 - rampUpDuration));
+            scaleFactor = peakScale - (peakScale - finalScale) * eased;
             dynamicStrokeColor = this.color;
           }
           alphaFactor = 0.2 + 0.8 * Math.min(1, birthProgress * 2.0);
+          drawRipple(this.pos.x, this.pos.y, birthProgress, this.baseColor);
+        } else if (this.animationState === 'alive') {
+          const breath = 1 + 0.05 * Math.sin((currentRunFrameCounter + parseInt(this.id.slice(-5),36)) / 20);
+          scaleFactor *= breath;
+          if (this.flinchTimer > 0) scaleFactor *= 1 + 0.1 * (this.flinchTimer / 5);
+          const healthRatio = clamp(this.health / config.predatorMaxHealth, 0, 1);
+          dynamicStrokeColor = modifyHslColor(dynamicStrokeColor, 1 - 0.3 * (1 - healthRatio), 1 - 0.2 * (1 - healthRatio));
         }
 
         ctx.globalAlpha = alphaFactor;
         const currentRadius = this.radius * scaleFactor;
 
         if (currentRadius > 0.1 && alphaFactor > 0.01) {
+          ctx.save();
+          ctx.translate(this.pos.x, this.pos.y);
+          ctx.rotate(orientation);
+          ctx.scale(1.2, 1);
           ctx.beginPath();
-          ctx.arc(this.pos.x, this.pos.y, currentRadius, 0, Math.PI * 2);
+          ctx.arc(0, 0, currentRadius, 0, Math.PI * 2);
           ctx.strokeStyle = dynamicStrokeColor;
           ctx.lineWidth = 3;
           ctx.stroke();
+          ctx.restore();
 
           if (this.animationState !== 'dying' && alphaFactor > 0.1 && scaleFactor > 0.25) {
             const healthPercentage = Math.max(0, this.health / config.predatorMaxHealth);
@@ -2670,6 +2735,7 @@ function updateCurrentBNPredictionsDisplay() {
         }
 
         if (this.animationState === 'dying' && deathProgress > 0.05 && deathProgress < 0.95) {
+          drawRipple(this.pos.x, this.pos.y, deathProgress, this.baseColor);
           const numFragments = 3 + Math.floor(Math.random() * 2);
           const fragmentBaseMaxRadius = this.radius * 0.3;
           for (let i = 0; i < numFragments; i++) {
@@ -2679,7 +2745,7 @@ function updateCurrentBNPredictionsDisplay() {
             const fragX = this.pos.x + Math.cos(fragmentAngle) * this.radius * 0.15 * outwardPushFactor;
             const fragY = this.pos.y + Math.sin(fragmentAngle) * this.radius * 0.15 * outwardPushFactor;
             const fragmentRadius = fragmentBaseMaxRadius * Math.max(0, (1 - deathProgress * 1.1)) * (0.4 + ((randomSeedForFrag * 13) % 100) / 100 * 0.6);
-            const fragmentSpecificAlphaMod = (0.7 - deathProgress * 0.6) * (0.5 + ((randomSeedForFrag * 7) % 100) / 100 * 0.5);
+            const fragmentSpecificAlphaMod = (0.7 - deathProgress * 0.6) * (0.5 + ((randomSeedForFrag * 7) % 100) / 100 * 0.5) * (1 - deathProgress);
             if (fragmentRadius > 0.5 && fragmentSpecificAlphaMod * alphaFactor > 0.05) {
               ctx.beginPath(); ctx.arc(fragX, fragY, fragmentRadius, 0, Math.PI * 2);
               ctx.fillStyle = modifyHslColor(this.baseColor, 0.4, 1.2, fragmentSpecificAlphaMod * alphaFactor);
