@@ -943,6 +943,8 @@
       favorableGrowthPlantProb: [],
       favorableGrowthPreyProb: [],
       favorableGrowthPredatorProb: [],
+      preyStarvationRiskProb: [],
+      predatorStarvationRiskProb: [],
       maxLength: 200
     };
 
@@ -3793,7 +3795,9 @@ function displayPastRunDetails(runIndex) {
             { data: runData.bnPredictionGraphHistory.predatorExtinctionProb || [], color: getComputedCssVar(CSS_VARS.PREDATOR_COLOR), lineWidth: 1.5, label: "P(Pred Extinct)" },
             { data: runData.bnPredictionGraphHistory.favorableGrowthPlantProb || [], color: modifyHslColor(getComputedCssVar(CSS_VARS.PLANT_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Plant Growth)" },
             { data: runData.bnPredictionGraphHistory.favorableGrowthPreyProb || [], color: modifyHslColor(getComputedCssVar(CSS_VARS.PREY_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Prey Growth)" },
-            { data: runData.bnPredictionGraphHistory.favorableGrowthPredatorProb || [], color: modifyHslColor(getComputedCssVar(CSS_VARS.PREDATOR_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Pred Growth)" }
+            { data: runData.bnPredictionGraphHistory.favorableGrowthPredatorProb || [], color: modifyHslColor(getComputedCssVar(CSS_VARS.PREDATOR_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Pred Growth)" },
+            { data: runData.bnPredictionGraphHistory.preyStarvationRiskProb || [], color: modifyHslColor(getComputedCssVar(CSS_VARS.PREY_COLOR), 0.8, 0.8), lineWidth: 1.5, label: "P(Prey Starv. Risk)" },
+            { data: runData.bnPredictionGraphHistory.predatorStarvationRiskProb || [], color: modifyHslColor(getComputedCssVar(CSS_VARS.PREDATOR_COLOR), 0.8, 0.8), lineWidth: 1.5, label: "P(Pred Starv. Risk)" }
         ];
         drawGenericGraph(pastBNPredictionGraphCtx, pastBNPredictionGraphCanvas, bnHistories, runData.bnPredictionGraphHistory.maxLength, 1.05, true);
         populateGraphLegend('pastBNPredictionGraphLegend', bnHistories);
@@ -4177,6 +4181,7 @@ function displayPastRunDetails(runIndex) {
 
             const extPredsHist = predictExtinctionProbabilities(paramsForLiveGraph);
             const growthPredsHist = predictFavorableGrowth(paramsForLiveGraph);
+            const starvPredsHist = predictStarvationRiskProbabilities(paramsForLiveGraph);
 
             if (!extPredsHist.error) {
                 bnPredictionHistory.preyExtinctionProb.push(extPredsHist.prey);
@@ -4193,6 +4198,13 @@ function displayPastRunDetails(runIndex) {
                 bnPredictionHistory.favorableGrowthPlantProb.push(0.5);
                 bnPredictionHistory.favorableGrowthPreyProb.push(0.5);
                 bnPredictionHistory.favorableGrowthPredatorProb.push(0.5);
+            }
+            if (!starvPredsHist.error) {
+                bnPredictionHistory.preyStarvationRiskProb.push(starvPredsHist.prey);
+                bnPredictionHistory.predatorStarvationRiskProb.push(starvPredsHist.predator);
+            } else {
+                bnPredictionHistory.preyStarvationRiskProb.push(0.5);
+                bnPredictionHistory.predatorStarvationRiskProb.push(0.5);
             }
 
             Object.values(bnPredictionHistory).forEach(arr => {
@@ -4555,7 +4567,9 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
         { data: bnPredictionHistory.predatorExtinctionProb, color: getComputedCssVar(CSS_VARS.PREDATOR_COLOR), lineWidth: 1.5, label: "P(Pred Extinct)", visible: true },
         { data: bnPredictionHistory.favorableGrowthPlantProb, color: modifyHslColor(getComputedCssVar(CSS_VARS.PLANT_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Plant Growth)", visible: true },
         { data: bnPredictionHistory.favorableGrowthPreyProb, color: modifyHslColor(getComputedCssVar(CSS_VARS.PREY_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Prey Growth)", visible: true },
-        { data: bnPredictionHistory.favorableGrowthPredatorProb, color: modifyHslColor(getComputedCssVar(CSS_VARS.PREDATOR_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Pred Growth)", visible: true } // Lighter pred color
+        { data: bnPredictionHistory.favorableGrowthPredatorProb, color: modifyHslColor(getComputedCssVar(CSS_VARS.PREDATOR_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Pred Growth)", visible: true },
+        { data: bnPredictionHistory.preyStarvationRiskProb, color: modifyHslColor(getComputedCssVar(CSS_VARS.PREY_COLOR), 0.8, 0.8), lineWidth: 1.5, label: "P(Prey Starv. Risk)", visible: true },
+        { data: bnPredictionHistory.predatorStarvationRiskProb, color: modifyHslColor(getComputedCssVar(CSS_VARS.PREDATOR_COLOR), 0.8, 0.8), lineWidth: 1.5, label: "P(Pred Starv. Risk)", visible: true }
       ];
 
         // Use a slightly modified generic graph drawing function for probabilities 0-1
