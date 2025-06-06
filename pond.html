@@ -2410,7 +2410,6 @@ function updateCurrentBNPredictionsDisplay() {
         let dynamicStrokeColor = this.color;
         let birthProgress = 0, deathProgress = 0;
         const orientation = this.vel.magSq() > 0.001 ? this.vel.angle() : 0;
-        const orientation = this.vel.magSq() > 0.001 ? this.vel.angle() : 0;
 
         if (this.animationState === 'dying') {
           deathProgress = this.animationProgress;
@@ -2656,6 +2655,7 @@ function updateCurrentBNPredictionsDisplay() {
         let scaleFactor = 1.0, alphaFactor = 1.0;
         let dynamicStrokeColor = this.color;
         let birthProgress = 0, deathProgress = 0;
+        const orientation = this.vel.magSq() > 0.001 ? this.vel.angle() : 0;
 
         if (this.animationState === 'dying') {
           deathProgress = this.animationProgress;
