@@ -136,6 +136,9 @@
     #populationGraphCanvas,
     #cumulativeGraphCanvas,
     #bnPredictionGraphCanvas,
+    #bnPredictionExtinctionGraphCanvas,
+    #bnPredictionGrowthGraphCanvas,
+    #bnPredictionStarvationGraphCanvas,
     #bnPredictionErrorGraphCanvas {
       width: 100%;
       height: 150px;
@@ -352,7 +355,10 @@
 
     #pastPopulationGraphCanvas,
     #pastCumulativeGraphCanvas,
-    #pastBNPredictionGraphCanvas {
+    #pastBNPredictionGraphCanvas,
+    #pastBNPredictionExtinctionGraphCanvas,
+    #pastBNPredictionGrowthGraphCanvas,
+    #pastBNPredictionStarvationGraphCanvas {
       width: 100%;
       max-width: 600px;
       height: 200px;
@@ -653,6 +659,21 @@
         <canvas id="bnPredictionGraphCanvas"></canvas>
         <div id="bnPredictionGraphLegend" class="graph-legend"></div>
       </div>
+      <div class="stat-subsection">
+        <h3>BN Prediction Trends - Extinction</h3>
+        <canvas id="bnPredictionExtinctionGraphCanvas"></canvas>
+        <div id="bnPredictionExtinctionGraphLegend" class="graph-legend"></div>
+      </div>
+      <div class="stat-subsection">
+        <h3>BN Prediction Trends - Growth</h3>
+        <canvas id="bnPredictionGrowthGraphCanvas"></canvas>
+        <div id="bnPredictionGrowthGraphLegend" class="graph-legend"></div>
+      </div>
+      <div class="stat-subsection">
+        <h3>BN Prediction Trends - Starvation Risk</h3>
+        <canvas id="bnPredictionStarvationGraphCanvas"></canvas>
+        <div id="bnPredictionStarvationGraphLegend" class="graph-legend"></div>
+      </div>
     </div>
   </div>
   <div id="graphTooltip" class="graph-tooltip" style="display:none;"></div>
@@ -812,6 +833,21 @@
         <canvas id="pastBNPredictionGraphCanvas"></canvas>
         <div id="pastBNPredictionGraphLegend" class="graph-legend"></div>
       </div>
+      <div class="stat-subsection mt-6">
+        <h4 class="text-lg font-medium mb-2 text-center">BN Prediction Trends - Extinction</h4>
+        <canvas id="pastBNPredictionExtinctionGraphCanvas"></canvas>
+        <div id="pastBNPredictionExtinctionGraphLegend" class="graph-legend"></div>
+      </div>
+      <div class="stat-subsection mt-6">
+        <h4 class="text-lg font-medium mb-2 text-center">BN Prediction Trends - Growth</h4>
+        <canvas id="pastBNPredictionGrowthGraphCanvas"></canvas>
+        <div id="pastBNPredictionGrowthGraphLegend" class="graph-legend"></div>
+      </div>
+      <div class="stat-subsection mt-6">
+        <h4 class="text-lg font-medium mb-2 text-center">BN Prediction Trends - Starvation Risk</h4>
+        <canvas id="pastBNPredictionStarvationGraphCanvas"></canvas>
+        <div id="pastBNPredictionStarvationGraphLegend" class="graph-legend"></div>
+      </div>
     </div>
 
     <div id="bayesianNetworkVisualizationContainer" class="mt-8" style="display:none;">
@@ -882,8 +918,14 @@
     let pastPopulationGraphCanvas, pastPopulationGraphCtx, pastCumulativeGraphCanvas, pastCumulativeGraphCtx;
     let bnVisualizationCanvas, bnVisualizationCtx;
     let bnPredictionGraphCanvas, bnPredictionGraphCtx;
+    let bnPredictionExtinctionGraphCanvas, bnPredictionExtinctionGraphCtx;
+    let bnPredictionGrowthGraphCanvas, bnPredictionGrowthGraphCtx;
+    let bnPredictionStarvationGraphCanvas, bnPredictionStarvationGraphCtx;
     let bnPredictionErrorGraphCanvas, bnPredictionErrorGraphCtx;
     let pastBNPredictionGraphCanvas, pastBNPredictionGraphCtx;
+    let pastBNPredictionExtinctionGraphCanvas, pastBNPredictionExtinctionGraphCtx;
+    let pastBNPredictionGrowthGraphCanvas, pastBNPredictionGrowthGraphCtx;
+    let pastBNPredictionStarvationGraphCanvas, pastBNPredictionStarvationGraphCtx;
     let bnLastNodePositions = {};
     let simulationViewContainer, pastRunsViewContainer, bnVisualizationContainer;
     let graphTooltip;
@@ -2922,6 +2964,21 @@ function updateCurrentBNPredictionsDisplay() {
             bnPredictionGraphCanvas.height = bnPredictionGraphCanvas.clientHeight;
             drawBNPredictionGraph();
           }
+          if (bnPredictionExtinctionGraphCanvas) {
+            bnPredictionExtinctionGraphCanvas.width = bnPredictionExtinctionGraphCanvas.clientWidth;
+            bnPredictionExtinctionGraphCanvas.height = bnPredictionExtinctionGraphCanvas.clientHeight;
+            drawBNPredictionExtinctionGraph();
+          }
+          if (bnPredictionGrowthGraphCanvas) {
+            bnPredictionGrowthGraphCanvas.width = bnPredictionGrowthGraphCanvas.clientWidth;
+            bnPredictionGrowthGraphCanvas.height = bnPredictionGrowthGraphCanvas.clientHeight;
+            drawBNPredictionGrowthGraph();
+          }
+          if (bnPredictionStarvationGraphCanvas) {
+            bnPredictionStarvationGraphCanvas.width = bnPredictionStarvationGraphCanvas.clientWidth;
+            bnPredictionStarvationGraphCanvas.height = bnPredictionStarvationGraphCanvas.clientHeight;
+            drawBNPredictionStarvationGraph();
+          }
           if (bnPredictionErrorGraphCanvas) {
             bnPredictionErrorGraphCanvas.width = bnPredictionErrorGraphCanvas.clientWidth;
             bnPredictionErrorGraphCanvas.height = bnPredictionErrorGraphCanvas.clientHeight;
@@ -3723,7 +3780,9 @@ function displayPastRunDetails(runIndex) {
     DOM_ELEMENTS.pastRunStatsDisplay.innerHTML = statsHtml;
     setTimeout(() => {
         if (!pastPopulationGraphCanvas || !pastCumulativeGraphCanvas || !pastBNPredictionGraphCanvas) return;
-        [pastPopulationGraphCanvas, pastCumulativeGraphCanvas, pastBNPredictionGraphCanvas].forEach(c => {
+        [pastPopulationGraphCanvas, pastCumulativeGraphCanvas, pastBNPredictionGraphCanvas,
+         pastBNPredictionExtinctionGraphCanvas, pastBNPredictionGrowthGraphCanvas,
+         pastBNPredictionStarvationGraphCanvas].forEach(c => {
             c.width = c.clientWidth;
             c.height = c.clientHeight || 200;
         });
@@ -3817,6 +3876,18 @@ function displayPastRunDetails(runIndex) {
         ];
         drawGenericGraph(pastBNPredictionGraphCtx, pastBNPredictionGraphCanvas, bnHistories, runData.bnPredictionGraphHistory.maxLength, 1.05, true);
         populateGraphLegend('pastBNPredictionGraphLegend', bnHistories);
+
+        const bnExtHistories = [bnHistories[0], bnHistories[1], bnHistories[2]];
+        drawGenericGraph(pastBNPredictionExtinctionGraphCtx, pastBNPredictionExtinctionGraphCanvas, bnExtHistories, runData.bnPredictionGraphHistory.maxLength, 1.05, true);
+        populateGraphLegend('pastBNPredictionExtinctionGraphLegend', bnExtHistories);
+
+        const bnGrowthHistories = [bnHistories[3], bnHistories[4], bnHistories[5]];
+        drawGenericGraph(pastBNPredictionGrowthGraphCtx, pastBNPredictionGrowthGraphCanvas, bnGrowthHistories, runData.bnPredictionGraphHistory.maxLength, 1.05, true);
+        populateGraphLegend('pastBNPredictionGrowthGraphLegend', bnGrowthHistories);
+
+        const bnStarvHistories = [bnHistories[6], bnHistories[7]];
+        drawGenericGraph(pastBNPredictionStarvationGraphCtx, pastBNPredictionStarvationGraphCanvas, bnStarvHistories, runData.bnPredictionGraphHistory.maxLength, 1.05, true);
+        populateGraphLegend('pastBNPredictionStarvationGraphLegend', bnStarvHistories);
     }, 50);
 }
 
@@ -4232,6 +4303,9 @@ function displayPastRunDetails(runIndex) {
             if (DOM_ELEMENTS.statsOverlay.classList.contains('visible')) {
                 updateCurrentBNPredictionsDisplay();
                 drawBNPredictionGraph();
+                drawBNPredictionExtinctionGraph();
+                drawBNPredictionGrowthGraph();
+                drawBNPredictionStarvationGraph();
             }
         }
 
@@ -4578,7 +4652,7 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
       }; reader.readAsText(file);
     }
 
-    function drawBNPredictionGraph() {
+  function drawBNPredictionGraph() {
       const yMax = 1.05; // Probabilities are 0-1, give a little padding
       const histories = [
         {
@@ -4635,7 +4709,45 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
           lineWidth: 1.5, 
           label: "P(Pred Starv. Risk)", 
           visible: true 
-        }
+  }
+
+    function drawBNPredictionExtinctionGraph() {
+      const yMax = 1.05;
+      const histories = [
+        { data: bnPredictionHistory.plantExtinctionProb, color: getComputedCssVar(CSS_VARS.PLANT_COLOR), lineWidth: 1.5, label: "P(Plant Extinct)", visible: true },
+        { data: bnPredictionHistory.preyExtinctionProb, color: getComputedCssVar(CSS_VARS.PREY_COLOR), lineWidth: 1.5, label: "P(Prey Extinct)", visible: true },
+        { data: bnPredictionHistory.predatorExtinctionProb, color: getComputedCssVar(CSS_VARS.PREDATOR_COLOR), lineWidth: 1.5, label: "P(Pred Extinct)", visible: true }
+      ];
+      drawGenericGraph(bnPredictionExtinctionGraphCtx, bnPredictionExtinctionGraphCanvas, histories, bnPredictionHistory.maxLength, yMax, true);
+      if (DOM_ELEMENTS.bnPredictionExtinctionGraphLegend) {
+        populateGraphLegend('bnPredictionExtinctionGraphLegend', histories, drawBNPredictionExtinctionGraph);
+      }
+    }
+
+    function drawBNPredictionGrowthGraph() {
+      const yMax = 1.05;
+      const histories = [
+        { data: bnPredictionHistory.favorableGrowthPlantProb, color: modifyHslColor(getComputedCssVar(CSS_VARS.PLANT_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Plant Growth)", visible: true },
+        { data: bnPredictionHistory.favorableGrowthPreyProb, color: modifyHslColor(getComputedCssVar(CSS_VARS.PREY_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Prey Growth)", visible: true },
+        { data: bnPredictionHistory.favorableGrowthPredatorProb, color: modifyHslColor(getComputedCssVar(CSS_VARS.PREDATOR_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Pred Growth)", visible: true }
+      ];
+      drawGenericGraph(bnPredictionGrowthGraphCtx, bnPredictionGrowthGraphCanvas, histories, bnPredictionHistory.maxLength, yMax, true);
+      if (DOM_ELEMENTS.bnPredictionGrowthGraphLegend) {
+        populateGraphLegend('bnPredictionGrowthGraphLegend', histories, drawBNPredictionGrowthGraph);
+      }
+    }
+
+    function drawBNPredictionStarvationGraph() {
+      const yMax = 1.05;
+      const histories = [
+        { data: bnPredictionHistory.preyStarvationRiskProb, color: modifyHslColor(getComputedCssVar(CSS_VARS.PREY_COLOR), 0.8, 0.8), lineWidth: 1.5, label: "P(Prey Starv. Risk)", visible: true },
+        { data: bnPredictionHistory.predatorStarvationRiskProb, color: modifyHslColor(getComputedCssVar(CSS_VARS.PREDATOR_COLOR), 0.8, 0.8), lineWidth: 1.5, label: "P(Pred Starv. Risk)", visible: true }
+      ];
+      drawGenericGraph(bnPredictionStarvationGraphCtx, bnPredictionStarvationGraphCanvas, histories, bnPredictionHistory.maxLength, yMax, true);
+      if (DOM_ELEMENTS.bnPredictionStarvationGraphLegend) {
+        populateGraphLegend('bnPredictionStarvationGraphLegend', histories, drawBNPredictionStarvationGraph);
+      }
+    }
       ];
 
       drawGenericGraph(bnPredictionGraphCtx, bnPredictionGraphCanvas, histories, bnPredictionHistory.maxLength, yMax, true);
@@ -4830,8 +4942,14 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
         'bnRunStartPredatorGrowthPrediction', 'bnRunStartPreyStarvationRiskPrediction',
         'bnRunStartPredStarvationRiskPrediction',
         'bnPredictionGraphCanvas', 'bnPredictionGraphLegend',
+        'bnPredictionExtinctionGraphCanvas', 'bnPredictionExtinctionGraphLegend',
+        'bnPredictionGrowthGraphCanvas', 'bnPredictionGrowthGraphLegend',
+        'bnPredictionStarvationGraphCanvas', 'bnPredictionStarvationGraphLegend',
         'bnPredictionErrorGraphCanvas', 'bnPredictionErrorGraphLegend',
         'pastBNPredictionGraphCanvas', 'pastBNPredictionGraphLegend',
+        'pastBNPredictionExtinctionGraphCanvas', 'pastBNPredictionExtinctionGraphLegend',
+        'pastBNPredictionGrowthGraphCanvas', 'pastBNPredictionGrowthGraphLegend',
+        'pastBNPredictionStarvationGraphCanvas', 'pastBNPredictionStarvationGraphLegend',
         'graphTooltip',
         // Add new elements
       ];
@@ -4848,10 +4966,22 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
 
       bnPredictionGraphCanvas = DOM_ELEMENTS.bnPredictionGraphCanvas; // Cache new canvas
       if (bnPredictionGraphCanvas) bnPredictionGraphCtx = bnPredictionGraphCanvas.getContext('2d'); // Get context
+      bnPredictionExtinctionGraphCanvas = DOM_ELEMENTS.bnPredictionExtinctionGraphCanvas;
+      if (bnPredictionExtinctionGraphCanvas) bnPredictionExtinctionGraphCtx = bnPredictionExtinctionGraphCanvas.getContext('2d');
+      bnPredictionGrowthGraphCanvas = DOM_ELEMENTS.bnPredictionGrowthGraphCanvas;
+      if (bnPredictionGrowthGraphCanvas) bnPredictionGrowthGraphCtx = bnPredictionGrowthGraphCanvas.getContext('2d');
+      bnPredictionStarvationGraphCanvas = DOM_ELEMENTS.bnPredictionStarvationGraphCanvas;
+      if (bnPredictionStarvationGraphCanvas) bnPredictionStarvationGraphCtx = bnPredictionStarvationGraphCanvas.getContext('2d');
       bnPredictionErrorGraphCanvas = DOM_ELEMENTS.bnPredictionErrorGraphCanvas;
       if (bnPredictionErrorGraphCanvas) bnPredictionErrorGraphCtx = bnPredictionErrorGraphCanvas.getContext('2d');
       pastBNPredictionGraphCanvas = DOM_ELEMENTS.pastBNPredictionGraphCanvas;
       if (pastBNPredictionGraphCanvas) pastBNPredictionGraphCtx = pastBNPredictionGraphCanvas.getContext('2d');
+      pastBNPredictionExtinctionGraphCanvas = DOM_ELEMENTS.pastBNPredictionExtinctionGraphCanvas;
+      if (pastBNPredictionExtinctionGraphCanvas) pastBNPredictionExtinctionGraphCtx = pastBNPredictionExtinctionGraphCanvas.getContext('2d');
+      pastBNPredictionGrowthGraphCanvas = DOM_ELEMENTS.pastBNPredictionGrowthGraphCanvas;
+      if (pastBNPredictionGrowthGraphCanvas) pastBNPredictionGrowthGraphCtx = pastBNPredictionGrowthGraphCanvas.getContext('2d');
+      pastBNPredictionStarvationGraphCanvas = DOM_ELEMENTS.pastBNPredictionStarvationGraphCanvas;
+      if (pastBNPredictionStarvationGraphCanvas) pastBNPredictionStarvationGraphCtx = pastBNPredictionStarvationGraphCanvas.getContext('2d');
       // Main view containers
       simulationViewContainer = DOM_ELEMENTS.simulationViewContainer;
       pastRunsViewContainer = DOM_ELEMENTS.pastRunsViewContainer;
@@ -4915,11 +5045,20 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
           if (cumulativeGraphCanvas.clientHeight > 0) cumulativeGraphCanvas.height = cumulativeGraphCanvas.clientHeight;
           if (bnPredictionGraphCanvas && bnPredictionGraphCanvas.clientWidth > 0) bnPredictionGraphCanvas.width = bnPredictionGraphCanvas.clientWidth;
           if (bnPredictionGraphCanvas && bnPredictionGraphCanvas.clientHeight > 0) bnPredictionGraphCanvas.height = bnPredictionGraphCanvas.clientHeight;
+          if (bnPredictionExtinctionGraphCanvas && bnPredictionExtinctionGraphCanvas.clientWidth > 0) bnPredictionExtinctionGraphCanvas.width = bnPredictionExtinctionGraphCanvas.clientWidth;
+          if (bnPredictionExtinctionGraphCanvas && bnPredictionExtinctionGraphCanvas.clientHeight > 0) bnPredictionExtinctionGraphCanvas.height = bnPredictionExtinctionGraphCanvas.clientHeight;
+          if (bnPredictionGrowthGraphCanvas && bnPredictionGrowthGraphCanvas.clientWidth > 0) bnPredictionGrowthGraphCanvas.width = bnPredictionGrowthGraphCanvas.clientWidth;
+          if (bnPredictionGrowthGraphCanvas && bnPredictionGrowthGraphCanvas.clientHeight > 0) bnPredictionGrowthGraphCanvas.height = bnPredictionGrowthGraphCanvas.clientHeight;
+          if (bnPredictionStarvationGraphCanvas && bnPredictionStarvationGraphCanvas.clientWidth > 0) bnPredictionStarvationGraphCanvas.width = bnPredictionStarvationGraphCanvas.clientWidth;
+          if (bnPredictionStarvationGraphCanvas && bnPredictionStarvationGraphCanvas.clientHeight > 0) bnPredictionStarvationGraphCanvas.height = bnPredictionStarvationGraphCanvas.clientHeight;
           if (bnPredictionErrorGraphCanvas && bnPredictionErrorGraphCanvas.clientWidth > 0) bnPredictionErrorGraphCanvas.width = bnPredictionErrorGraphCanvas.clientWidth;
           if (bnPredictionErrorGraphCanvas && bnPredictionErrorGraphCanvas.clientHeight > 0) bnPredictionErrorGraphCanvas.height = bnPredictionErrorGraphCanvas.clientHeight;
           drawPopulationGraph();
           drawCumulativeGraph();
           if (bnPredictionGraphCanvas) drawBNPredictionGraph();
+          if (bnPredictionExtinctionGraphCanvas) drawBNPredictionExtinctionGraph();
+          if (bnPredictionGrowthGraphCanvas) drawBNPredictionGrowthGraph();
+          if (bnPredictionStarvationGraphCanvas) drawBNPredictionStarvationGraph();
           if (bnPredictionErrorGraphCanvas) drawBNPredictionErrorGraph();
         }
       } else { // If past runs view is active
@@ -4938,6 +5077,12 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
             if (pastCumulativeGraphCanvas.clientHeight > 0) pastCumulativeGraphCanvas.height = pastCumulativeGraphCanvas.clientHeight || 200;
             if (pastBNPredictionGraphCanvas.clientWidth > 0) pastBNPredictionGraphCanvas.width = pastBNPredictionGraphCanvas.clientWidth;
             if (pastBNPredictionGraphCanvas.clientHeight > 0) pastBNPredictionGraphCanvas.height = pastBNPredictionGraphCanvas.clientHeight || 200;
+            if (pastBNPredictionExtinctionGraphCanvas.clientWidth > 0) pastBNPredictionExtinctionGraphCanvas.width = pastBNPredictionExtinctionGraphCanvas.clientWidth;
+            if (pastBNPredictionExtinctionGraphCanvas.clientHeight > 0) pastBNPredictionExtinctionGraphCanvas.height = pastBNPredictionExtinctionGraphCanvas.clientHeight || 200;
+            if (pastBNPredictionGrowthGraphCanvas.clientWidth > 0) pastBNPredictionGrowthGraphCanvas.width = pastBNPredictionGrowthGraphCanvas.clientWidth;
+            if (pastBNPredictionGrowthGraphCanvas.clientHeight > 0) pastBNPredictionGrowthGraphCanvas.height = pastBNPredictionGrowthGraphCanvas.clientHeight || 200;
+            if (pastBNPredictionStarvationGraphCanvas.clientWidth > 0) pastBNPredictionStarvationGraphCanvas.width = pastBNPredictionStarvationGraphCanvas.clientWidth;
+            if (pastBNPredictionStarvationGraphCanvas.clientHeight > 0) pastBNPredictionStarvationGraphCanvas.height = pastBNPredictionStarvationGraphCanvas.clientHeight || 200;
           }
         }
         // Resize and redraw BN visualization if visible
