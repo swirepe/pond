@@ -895,6 +895,9 @@
       BN_GROUP_OUTCOME: '--bn-group-outcome',
     };
 
+    // Cache for frequently used CSS variable values
+    let cachedCssVars = {};
+
     const BN_NODE_NAMES = {
       PREY_EXTINCTION: 'PreyExtinction', PREDATOR_EXTINCTION: 'PredatorExtinction',
       FAVORABLE_GROWTH_PLANT: 'FavorableGrowthPlant',
@@ -2093,7 +2096,27 @@ function updateCurrentBNPredictionsDisplay() {
 
     // --- Utility Functions ---
     function getComputedCssVar(varName) { return getComputedStyle(document.documentElement).getPropertyValue(varName).trim(); }
-    function getUrlParams() { const params = new URLSearchParams(window.location.search); config.hue = parseInt(params.get('hue')) || config.hue; config.headerText = params.get('header') || config.headerText; config.subheaderText = params.get('subheader') || config.subheaderText; document.documentElement.style.setProperty(CSS_VARS.BASE_HUE, config.hue); DOM_ELEMENTS.pageHeader.textContent = config.headerText; DOM_ELEMENTS.pageSubheader.textContent = config.subheaderText; }
+
+    function updateCachedCssVars() {
+      Object.values(CSS_VARS).forEach(v => { cachedCssVars[v] = getComputedCssVar(v); });
+    }
+
+    function getUrlParams() {
+      const params = new URLSearchParams(window.location.search);
+      config.hue = parseInt(params.get('hue')) || config.hue;
+      config.headerText = params.get('header') || config.headerText;
+      config.subheaderText = params.get('subheader') || config.subheaderText;
+      document.documentElement.style.setProperty(CSS_VARS.BASE_HUE, config.hue);
+      DOM_ELEMENTS.pageHeader.textContent = config.headerText;
+      DOM_ELEMENTS.pageSubheader.textContent = config.subheaderText;
+      updateCachedCssVars();
+    }
+
+    function setBaseHue(newHue) {
+      config.hue = newHue;
+      document.documentElement.style.setProperty(CSS_VARS.BASE_HUE, newHue);
+      updateCachedCssVars();
+    }
     function random(min, max) { return Math.random() * (max - min) + min; }
     function randomInt(min, max) { return Math.floor(random(min, max + 1)); }
     function distance(x1, y1, x2, y2) { const dx = x1 - x2; const dy = y1 - y2; return Math.sqrt(dx * dx + dy * dy); }
@@ -2265,7 +2288,7 @@ function updateCurrentBNPredictionsDisplay() {
       constructor(x, y) {
         super(x, y, 3);
         this.health = config.plantHealth;
-        this.baseColor = getComputedCssVar(CSS_VARS.PLANT_COLOR);
+        this.baseColor = cachedCssVars[CSS_VARS.PLANT_COLOR];
         this.color = this.baseColor; // May be modified by animations
         this.isPlankton = config.planktonMode;
         if (this.isPlankton) this.vel = Vector.random2D().mult(config.planktonDriftSpeed);
@@ -2382,7 +2405,7 @@ function updateCurrentBNPredictionsDisplay() {
         this.inertiaEffectStrength = config.preyInertiaEffectStrength;
         this.turnSpeedPenaltyFactor = config.preyTurnSpeedPenaltyFactor;
         this.sharpTurnThresholdAngle = config.preySharpTurnThresholdAngle;
-        this.baseColor = getComputedCssVar(CSS_VARS.PREY_COLOR);
+        this.baseColor = cachedCssVars[CSS_VARS.PREY_COLOR];
         this.color = this.baseColor;
         this.isFleeing = false;
         this.reproductionCooldown = 0;
@@ -2439,7 +2462,7 @@ function updateCurrentBNPredictionsDisplay() {
               this.target = nearbyPredator;
               this.isAttackingPredatorTarget = nearbyPredator;
               steeringForce = this.seek(nearbyPredator.pos);
-              this.color = `hsl(calc(${getComputedCssVar(CSS_VARS.BASE_HUE)} + 30), 90%, 70%)`;
+              this.color = `hsl(calc(${cachedCssVars[CSS_VARS.BASE_HUE]} + 30), 90%, 70%)`;
             } else {
               steeringForce = this.flee(nearbyPredator.pos);
               this.isFleeing = true; this.target = null;
@@ -2569,7 +2592,7 @@ function updateCurrentBNPredictionsDisplay() {
           }
           if (this.isEating && !this.isAttackingPredatorTarget && this.animationState === 'alive') {
             const eatPulse = Math.sin((currentRunFrameCounter + parseInt(this.id.slice(-5), 36) % 30) * Math.PI / 15) * 0.15 + 0.15;
-            ctx.fillStyle = modifyHslColor(getComputedCssVar(CSS_VARS.PLANT_COLOR), 1.2, 1.1, eatPulse);
+            ctx.fillStyle = modifyHslColor(cachedCssVars[CSS_VARS.PLANT_COLOR], 1.2, 1.1, eatPulse);
             ctx.beginPath();
             ctx.arc(this.pos.x, this.pos.y, currentRadius + 2 + eatPulse * 3, 0, Math.PI * 2);
             ctx.fill();
@@ -2582,7 +2605,7 @@ function updateCurrentBNPredictionsDisplay() {
             if (this.vel.magSq() > 0.01) { const dir = this.vel.clone().normalize(); eyePosX += dir.x * eyeOffsetMagnitude; eyePosY += dir.y * eyeOffsetMagnitude; }
             else { eyePosX += eyeOffsetMagnitude * Math.cos(this.vel.angle() || 0); eyePosY += eyeOffsetMagnitude * Math.sin(this.vel.angle() || 0); } // Use current vel angle or default (0 rad)
             ctx.beginPath(); ctx.arc(eyePosX, eyePosY, eyeRadius, 0, Math.PI * 2);
-            ctx.fillStyle = this.isFleeing ? `hsla(calc(${getComputedCssVar(CSS_VARS.BASE_HUE)} + 180), 80%, 60%, ${alphaFactor})` : `hsla(0, 0%, 10%, ${alphaFactor * 0.9})`;
+            ctx.fillStyle = this.isFleeing ? `hsla(calc(${cachedCssVars[CSS_VARS.BASE_HUE]} + 180), 80%, 60%, ${alphaFactor})` : `hsla(0, 0%, 10%, ${alphaFactor * 0.9})`;
             ctx.fill();
           }
         }
@@ -2619,8 +2642,8 @@ function updateCurrentBNPredictionsDisplay() {
         this.inertiaEffectStrength = config.predatorInertiaEffectStrength;
         this.turnSpeedPenaltyFactor = config.predatorTurnSpeedPenaltyFactor;
         this.sharpTurnThresholdAngle = config.predatorSharpTurnThresholdAngle;
-        this.baseColor = getComputedCssVar(CSS_VARS.PREDATOR_COLOR);
-        this.mobbedColor = getComputedCssVar(CSS_VARS.PREDATOR_MOBBED_COLOR);
+        this.baseColor = cachedCssVars[CSS_VARS.PREDATOR_COLOR];
+        this.mobbedColor = cachedCssVars[CSS_VARS.PREDATOR_MOBBED_COLOR];
         this.color = this.baseColor;
         this.reproductionCooldown = 0;
         this.attackedByPreyTimer = 0;
@@ -2815,7 +2838,7 @@ function updateCurrentBNPredictionsDisplay() {
           }
           if (this.isEating && this.animationState === 'alive') {
             const eatPulse = Math.sin((currentRunFrameCounter + parseInt(this.id.slice(-5), 36) % 30) * Math.PI / 15) * 0.15 + 0.15;
-            ctx.fillStyle = modifyHslColor(getComputedCssVar(CSS_VARS.PREY_COLOR), 1.2, 1.1, eatPulse);
+            ctx.fillStyle = modifyHslColor(cachedCssVars[CSS_VARS.PREY_COLOR], 1.2, 1.1, eatPulse);
             ctx.beginPath();
             ctx.arc(this.pos.x, this.pos.y, currentRadius + 3 + eatPulse * 3, 0, Math.PI * 2);
             ctx.fill();
@@ -3592,15 +3615,15 @@ function updateCurrentBNPredictionsDisplay() {
     const summaryGraphCtx = canvasEl.getContext('2d');
     const popHistories = [{
         data: runData.populationGraphHistory.plants,
-        color: getComputedCssVar(CSS_VARS.PLANT_COLOR),
+        color: cachedCssVars[CSS_VARS.PLANT_COLOR],
         lineWidth: 1.5
     }, {
         data: runData.populationGraphHistory.prey,
-        color: getComputedCssVar(CSS_VARS.PREY_COLOR),
+        color: cachedCssVars[CSS_VARS.PREY_COLOR],
         lineWidth: 1.5
     }, {
         data: runData.populationGraphHistory.predators,
-        color: getComputedCssVar(CSS_VARS.PREDATOR_COLOR),
+        color: cachedCssVars[CSS_VARS.PREDATOR_COLOR],
         lineWidth: 1.5
     }, ];
     drawSimplifiedGenericGraph(summaryGraphCtx, canvasEl, popHistories, runData.populationGraphHistory.maxLength);
@@ -3788,37 +3811,37 @@ function displayPastRunDetails(runIndex) {
         });
         const popHistories = [{
             data: runData.populationGraphHistory.plants,
-            color: getComputedCssVar(CSS_VARS.PLANT_COLOR),
+            color: cachedCssVars[CSS_VARS.PLANT_COLOR],
             lineWidth: 2,
             label: "Plants"
         }, {
             data: runData.populationGraphHistory.prey,
-            color: getComputedCssVar(CSS_VARS.PREY_COLOR),
+            color: cachedCssVars[CSS_VARS.PREY_COLOR],
             lineWidth: 2,
             label: "Prey"
         }, {
             data: runData.populationGraphHistory.predators,
-            color: getComputedCssVar(CSS_VARS.PREDATOR_COLOR),
+            color: cachedCssVars[CSS_VARS.PREDATOR_COLOR],
             lineWidth: 2,
             label: "Predators"
         }, {
             data: runData.populationGraphHistory.preyPredationDeaths,
-            color: getComputedCssVar(CSS_VARS.GRAPH_PREY_PRED_DEATH_COLOR),
+            color: cachedCssVars[CSS_VARS.GRAPH_PREY_PRED_DEATH_COLOR],
             lineWidth: 1.5,
             label: "Prey (PredD)"
         }, {
             data: runData.populationGraphHistory.preyStarvationDeaths,
-            color: getComputedCssVar(CSS_VARS.GRAPH_PREY_STARV_DEATH_COLOR),
+            color: cachedCssVars[CSS_VARS.GRAPH_PREY_STARV_DEATH_COLOR],
             lineWidth: 1.5,
             label: "Prey (StarvD)"
         }, {
             data: runData.populationGraphHistory.predatorStarvationDeaths,
-            color: getComputedCssVar(CSS_VARS.GRAPH_PRED_STARV_DEATH_COLOR),
+            color: cachedCssVars[CSS_VARS.GRAPH_PRED_STARV_DEATH_COLOR],
             lineWidth: 1.5,
             label: "Pred (StarvD)"
         }, {
             data: runData.populationGraphHistory.predatorMobbingDeaths,
-            color: getComputedCssVar(CSS_VARS.GRAPH_PRED_MOB_DEATH_COLOR),
+            color: cachedCssVars[CSS_VARS.GRAPH_PRED_MOB_DEATH_COLOR],
             lineWidth: 1.5,
             label: "Pred (MobD)"
         }];
@@ -3826,37 +3849,37 @@ function displayPastRunDetails(runIndex) {
         populateGraphLegend('pastPopulationGraphLegend', popHistories);
         const cumHistories = [{
                 data: runData.cumulativeGraphHistory.plantBirths || [],
-                color: getComputedCssVar(CSS_VARS.GRAPH_PLANT_BIRTH_COLOR),
+                color: cachedCssVars[CSS_VARS.GRAPH_PLANT_BIRTH_COLOR],
                 lineWidth: 2,
                 label: "Plant Births"
             },
             {
                 data: runData.cumulativeGraphHistory.plantsConsumed || [],
-                color: getComputedCssVar(CSS_VARS.GRAPH_PLANTS_CONSUMED_COLOR),
+                color: cachedCssVars[CSS_VARS.GRAPH_PLANTS_CONSUMED_COLOR],
                 lineWidth: 2,
                 label: "Plants Consumed"
             },
             {
                 data: runData.cumulativeGraphHistory.preyBirths || [],
-                color: getComputedCssVar(CSS_VARS.GRAPH_PREY_BIRTH_COLOR),
+                color: cachedCssVars[CSS_VARS.GRAPH_PREY_BIRTH_COLOR],
                 lineWidth: 2,
                 label: "Prey Births"
             },
             {
                 data: runData.cumulativeGraphHistory.predatorBirths || [],
-                color: getComputedCssVar(CSS_VARS.GRAPH_PREDATOR_BIRTH_COLOR),
+                color: cachedCssVars[CSS_VARS.GRAPH_PREDATOR_BIRTH_COLOR],
                 lineWidth: 2,
                 label: "Predator Births"
             },
             {
                 data: runData.cumulativeGraphHistory.totalPreyDeaths || [],
-                color: getComputedCssVar(CSS_VARS.GRAPH_TOTAL_PREY_DEATH_COLOR),
+                color: cachedCssVars[CSS_VARS.GRAPH_TOTAL_PREY_DEATH_COLOR],
                 lineWidth: 2,
                 label: "Total Prey Deaths"
             },
             {
                 data: runData.cumulativeGraphHistory.totalPredatorDeaths || [],
-                color: getComputedCssVar(CSS_VARS.GRAPH_TOTAL_PREDATOR_DEATH_COLOR),
+                color: cachedCssVars[CSS_VARS.GRAPH_TOTAL_PREDATOR_DEATH_COLOR],
                 lineWidth: 2,
                 label: "Total Predator Deaths"
             }
@@ -3865,14 +3888,14 @@ function displayPastRunDetails(runIndex) {
         populateGraphLegend('pastCumulativeGraphLegend', cumHistories);
 
         const bnHistories = [
-            { data: runData.bnPredictionGraphHistory.plantExtinctionProb || [], color: getComputedCssVar(CSS_VARS.PLANT_COLOR), lineWidth: 1.5, label: "P(Plant Extinct)" },
-            { data: runData.bnPredictionGraphHistory.preyExtinctionProb || [], color: getComputedCssVar(CSS_VARS.PREY_COLOR), lineWidth: 1.5, label: "P(Prey Extinct)" },
-            { data: runData.bnPredictionGraphHistory.predatorExtinctionProb || [], color: getComputedCssVar(CSS_VARS.PREDATOR_COLOR), lineWidth: 1.5, label: "P(Pred Extinct)" },
-            { data: runData.bnPredictionGraphHistory.favorableGrowthPlantProb || [], color: modifyHslColor(getComputedCssVar(CSS_VARS.PLANT_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Plant Growth)" },
-            { data: runData.bnPredictionGraphHistory.favorableGrowthPreyProb || [], color: modifyHslColor(getComputedCssVar(CSS_VARS.PREY_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Prey Growth)" },
-            { data: runData.bnPredictionGraphHistory.favorableGrowthPredatorProb || [], color: modifyHslColor(getComputedCssVar(CSS_VARS.PREDATOR_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Pred Growth)" },
-            { data: runData.bnPredictionGraphHistory.preyStarvationRiskProb || [], color: modifyHslColor(getComputedCssVar(CSS_VARS.PREY_COLOR), 0.8, 0.8), lineWidth: 1.5, label: "P(Prey Starv. Risk)" },
-            { data: runData.bnPredictionGraphHistory.predatorStarvationRiskProb || [], color: modifyHslColor(getComputedCssVar(CSS_VARS.PREDATOR_COLOR), 0.8, 0.8), lineWidth: 1.5, label: "P(Pred Starv. Risk)" }
+            { data: runData.bnPredictionGraphHistory.plantExtinctionProb || [], color: cachedCssVars[CSS_VARS.PLANT_COLOR], lineWidth: 1.5, label: "P(Plant Extinct)" },
+            { data: runData.bnPredictionGraphHistory.preyExtinctionProb || [], color: cachedCssVars[CSS_VARS.PREY_COLOR], lineWidth: 1.5, label: "P(Prey Extinct)" },
+            { data: runData.bnPredictionGraphHistory.predatorExtinctionProb || [], color: cachedCssVars[CSS_VARS.PREDATOR_COLOR], lineWidth: 1.5, label: "P(Pred Extinct)" },
+            { data: runData.bnPredictionGraphHistory.favorableGrowthPlantProb || [], color: modifyHslColor(cachedCssVars[CSS_VARS.PLANT_COLOR], 1, 1.2), lineWidth: 1.5, label: "P(Plant Growth)" },
+            { data: runData.bnPredictionGraphHistory.favorableGrowthPreyProb || [], color: modifyHslColor(cachedCssVars[CSS_VARS.PREY_COLOR], 1, 1.2), lineWidth: 1.5, label: "P(Prey Growth)" },
+            { data: runData.bnPredictionGraphHistory.favorableGrowthPredatorProb || [], color: modifyHslColor(cachedCssVars[CSS_VARS.PREDATOR_COLOR], 1, 1.2), lineWidth: 1.5, label: "P(Pred Growth)" },
+            { data: runData.bnPredictionGraphHistory.preyStarvationRiskProb || [], color: modifyHslColor(cachedCssVars[CSS_VARS.PREY_COLOR], 0.8, 0.8), lineWidth: 1.5, label: "P(Prey Starv. Risk)" },
+            { data: runData.bnPredictionGraphHistory.predatorStarvationRiskProb || [], color: modifyHslColor(cachedCssVars[CSS_VARS.PREDATOR_COLOR], 0.8, 0.8), lineWidth: 1.5, label: "P(Pred Starv. Risk)" }
         ];
         drawGenericGraph(pastBNPredictionGraphCtx, pastBNPredictionGraphCanvas, bnHistories, runData.bnPredictionGraphHistory.maxLength, 1.05, true);
         populateGraphLegend('pastBNPredictionGraphLegend', bnHistories);
@@ -4064,7 +4087,7 @@ function displayPastRunDetails(runIndex) {
 
     function drawSimplifiedGenericGraph(graphCtxLocal, canvasLocal, histories, maxLength) {
       if (!canvasLocal || canvasLocal.width === 0 || canvasLocal.height === 0) return;
-      const bgColor = getComputedCssVar(CSS_VARS.BG_COLOR);
+      const bgColor = cachedCssVars[CSS_VARS.BG_COLOR];
       graphCtxLocal.fillStyle = bgColor;
       graphCtxLocal.fillRect(0, 0, canvasLocal.width, canvasLocal.height);
 
@@ -4098,9 +4121,9 @@ function displayPastRunDetails(runIndex) {
     function drawGenericGraph(graphCtxLocal, canvasLocal, histories, maxLength) {
       if (!canvasLocal || canvasLocal.width === 0 || canvasLocal.height === 0) return;
 
-      const bgColor = getComputedCssVar(CSS_VARS.BG_COLOR);
-      const gridColor = getComputedCssVar(CSS_VARS.GRAPH_GRID_COLOR);
-      const textColor = getComputedCssVar(CSS_VARS.TEXT_COLOR_DARKER);
+      const bgColor = cachedCssVars[CSS_VARS.BG_COLOR];
+      const gridColor = cachedCssVars[CSS_VARS.GRAPH_GRID_COLOR];
+      const textColor = cachedCssVars[CSS_VARS.TEXT_COLOR_DARKER];
 
       graphCtxLocal.fillStyle = bgColor;
       graphCtxLocal.fillRect(0, 0, canvasLocal.width, canvasLocal.height);
@@ -4167,13 +4190,13 @@ function displayPastRunDetails(runIndex) {
 
     function drawPopulationGraph() {
       const histories = [
-        { data: populationHistory.plants, color: getComputedCssVar(CSS_VARS.PLANT_COLOR), lineWidth: 2, label: "Plants", visible: true },
-        { data: populationHistory.prey, color: getComputedCssVar(CSS_VARS.PREY_COLOR), lineWidth: 2, label: "Prey", visible: true },
-        { data: populationHistory.predators, color: getComputedCssVar(CSS_VARS.PREDATOR_COLOR), lineWidth: 2, label: "Predators", visible: true },
-        { data: populationHistory.preyPredationDeaths, color: getComputedCssVar(CSS_VARS.GRAPH_PREY_PRED_DEATH_COLOR), lineWidth: 1.5, label: "Prey (PredD)", visible: true },
-        { data: populationHistory.preyStarvationDeaths, color: getComputedCssVar(CSS_VARS.GRAPH_PREY_STARV_DEATH_COLOR), lineWidth: 1.5, label: "Prey (StarvD)", visible: true },
-        { data: populationHistory.predatorStarvationDeaths, color: getComputedCssVar(CSS_VARS.GRAPH_PRED_STARV_DEATH_COLOR), lineWidth: 1.5, label: "Pred (StarvD)", visible: true },
-        { data: populationHistory.predatorMobbingDeaths, color: getComputedCssVar(CSS_VARS.GRAPH_PRED_MOB_DEATH_COLOR), lineWidth: 1.5, label: "Pred (MobD)", visible: true }
+        { data: populationHistory.plants, color: cachedCssVars[CSS_VARS.PLANT_COLOR], lineWidth: 2, label: "Plants", visible: true },
+        { data: populationHistory.prey, color: cachedCssVars[CSS_VARS.PREY_COLOR], lineWidth: 2, label: "Prey", visible: true },
+        { data: populationHistory.predators, color: cachedCssVars[CSS_VARS.PREDATOR_COLOR], lineWidth: 2, label: "Predators", visible: true },
+        { data: populationHistory.preyPredationDeaths, color: cachedCssVars[CSS_VARS.GRAPH_PREY_PRED_DEATH_COLOR], lineWidth: 1.5, label: "Prey (PredD)", visible: true },
+        { data: populationHistory.preyStarvationDeaths, color: cachedCssVars[CSS_VARS.GRAPH_PREY_STARV_DEATH_COLOR], lineWidth: 1.5, label: "Prey (StarvD)", visible: true },
+        { data: populationHistory.predatorStarvationDeaths, color: cachedCssVars[CSS_VARS.GRAPH_PRED_STARV_DEATH_COLOR], lineWidth: 1.5, label: "Pred (StarvD)", visible: true },
+        { data: populationHistory.predatorMobbingDeaths, color: cachedCssVars[CSS_VARS.GRAPH_PRED_MOB_DEATH_COLOR], lineWidth: 1.5, label: "Pred (MobD)", visible: true }
       ];
       drawGenericGraph(populationGraphCtx, populationGraphCanvas, histories, populationHistory.maxLength);
       if (DOM_ELEMENTS.currentPopulationGraphLegend) {
@@ -4183,12 +4206,12 @@ function displayPastRunDetails(runIndex) {
 
     function drawCumulativeGraph() {
       const histories = [
-        { data: cumulativeHistory.plantBirths, color: getComputedCssVar(CSS_VARS.GRAPH_PLANT_BIRTH_COLOR), lineWidth: 2, label: "Plant Births", visible: true },
-        { data: cumulativeHistory.plantsConsumed, color: getComputedCssVar(CSS_VARS.GRAPH_PLANTS_CONSUMED_COLOR), lineWidth: 2, label: "Plants Consumed", visible: true },
-        { data: cumulativeHistory.preyBirths, color: getComputedCssVar(CSS_VARS.GRAPH_PREY_BIRTH_COLOR), lineWidth: 2, label: "Prey Births", visible: true },
-        { data: cumulativeHistory.predatorBirths, color: getComputedCssVar(CSS_VARS.GRAPH_PREDATOR_BIRTH_COLOR), lineWidth: 2, label: "Predator Births", visible: true },
-        { data: cumulativeHistory.totalPreyDeaths, color: getComputedCssVar(CSS_VARS.GRAPH_TOTAL_PREY_DEATH_COLOR), lineWidth: 2, label: "Total Prey Deaths", visible: true },
-        { data: cumulativeHistory.totalPredatorDeaths, color: getComputedCssVar(CSS_VARS.GRAPH_TOTAL_PREDATOR_DEATH_COLOR), lineWidth: 2, label: "Total Predator Deaths", visible: true }
+        { data: cumulativeHistory.plantBirths, color: cachedCssVars[CSS_VARS.GRAPH_PLANT_BIRTH_COLOR], lineWidth: 2, label: "Plant Births", visible: true },
+        { data: cumulativeHistory.plantsConsumed, color: cachedCssVars[CSS_VARS.GRAPH_PLANTS_CONSUMED_COLOR], lineWidth: 2, label: "Plants Consumed", visible: true },
+        { data: cumulativeHistory.preyBirths, color: cachedCssVars[CSS_VARS.GRAPH_PREY_BIRTH_COLOR], lineWidth: 2, label: "Prey Births", visible: true },
+        { data: cumulativeHistory.predatorBirths, color: cachedCssVars[CSS_VARS.GRAPH_PREDATOR_BIRTH_COLOR], lineWidth: 2, label: "Predator Births", visible: true },
+        { data: cumulativeHistory.totalPreyDeaths, color: cachedCssVars[CSS_VARS.GRAPH_TOTAL_PREY_DEATH_COLOR], lineWidth: 2, label: "Total Prey Deaths", visible: true },
+        { data: cumulativeHistory.totalPredatorDeaths, color: cachedCssVars[CSS_VARS.GRAPH_TOTAL_PREDATOR_DEATH_COLOR], lineWidth: 2, label: "Total Predator Deaths", visible: true }
       ];
       drawGenericGraph(cumulativeGraphCtx, cumulativeGraphCanvas, histories, cumulativeHistory.maxLength, null, false, true, true);
       if (DOM_ELEMENTS.currentCumulativeGraphLegend) {
@@ -4197,7 +4220,7 @@ function displayPastRunDetails(runIndex) {
     }
 
     function render() {
-      ctx.fillStyle = getComputedCssVar(CSS_VARS.BG_COLOR);
+      ctx.fillStyle = cachedCssVars[CSS_VARS.BG_COLOR];
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       plants.forEach(p => p.draw());
@@ -4408,7 +4431,7 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
   if (lines.length > 2) lines = lines.slice(0, 2);
   const lineHeight = currentFontSize * 1.1;
   let startY = y - ((lines.length - 1) * lineHeight / 2) - (detailText ? detailFontSize / 3 : 0);
-  ctxLocal.fillStyle = getComputedCssVar(CSS_VARS.TEXT_COLOR);
+  ctxLocal.fillStyle = cachedCssVars[CSS_VARS.TEXT_COLOR];
   ctxLocal.font = fontString;
   lines.forEach((l, i) => ctxLocal.fillText(l, x, startY + i * lineHeight));
   if (detailText) {
@@ -4429,7 +4452,7 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
         canvasEl.width = canvasEl.clientWidth;
         canvasEl.height = canvasEl.clientHeight;
         ctxLocal.clearRect(0, 0, canvasEl.width, canvasEl.height);
-        ctxLocal.fillStyle = getComputedCssVar(CSS_VARS.BG_COLOR);
+        ctxLocal.fillStyle = cachedCssVars[CSS_VARS.BG_COLOR];
         ctxLocal.fillRect(0, 0, canvasEl.width, canvasEl.height);
         const nodes = simBayesianNetwork.nodes;
         const sortedNodeNames = simBayesianNetwork.topologicalSort();
@@ -4479,19 +4502,19 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
           });
         });
 
-        const edgeColor = getComputedCssVar(CSS_VARS.BN_EDGE_COLOR);
-        const edgeColorPositive = getComputedCssVar(CSS_VARS.BN_EDGE_COLOR_POSITIVE);
-        const edgeColorNegative = getComputedCssVar(CSS_VARS.BN_EDGE_COLOR_NEGATIVE);
-        const arrowheadColor = getComputedCssVar(CSS_VARS.BN_ARROWHEAD_COLOR);
-        const nodeParamBg = getComputedCssVar(CSS_VARS.BN_NODE_PARAM_BG);
-        const nodeOutcomeBg = getComputedCssVar(CSS_VARS.BN_NODE_OUTCOME_BG);
-        const nodeBorderColor = getComputedCssVar(CSS_VARS.BN_NODE_BORDER);
+        const edgeColor = cachedCssVars[CSS_VARS.BN_EDGE_COLOR];
+        const edgeColorPositive = cachedCssVars[CSS_VARS.BN_EDGE_COLOR_POSITIVE];
+        const edgeColorNegative = cachedCssVars[CSS_VARS.BN_EDGE_COLOR_NEGATIVE];
+        const arrowheadColor = cachedCssVars[CSS_VARS.BN_ARROWHEAD_COLOR];
+        const nodeParamBg = cachedCssVars[CSS_VARS.BN_NODE_PARAM_BG];
+        const nodeOutcomeBg = cachedCssVars[CSS_VARS.BN_NODE_OUTCOME_BG];
+        const nodeBorderColor = cachedCssVars[CSS_VARS.BN_NODE_BORDER];
         const groupColors = {
-          plant: getComputedCssVar(CSS_VARS.BN_GROUP_PLANT),
-          prey: getComputedCssVar(CSS_VARS.BN_GROUP_PREY),
-          predator: getComputedCssVar(CSS_VARS.BN_GROUP_PREDATOR),
-          derived: getComputedCssVar(CSS_VARS.BN_GROUP_DERIVED),
-          outcome: getComputedCssVar(CSS_VARS.BN_GROUP_OUTCOME)
+          plant: cachedCssVars[CSS_VARS.BN_GROUP_PLANT],
+          prey: cachedCssVars[CSS_VARS.BN_GROUP_PREY],
+          predator: cachedCssVars[CSS_VARS.BN_GROUP_PREDATOR],
+          derived: cachedCssVars[CSS_VARS.BN_GROUP_DERIVED],
+          outcome: cachedCssVars[CSS_VARS.BN_GROUP_OUTCOME]
         };
 
         sortedNodeNames.forEach(childName => {
@@ -4581,16 +4604,16 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
       const legendDiv = DOM_ELEMENTS.bnLegend;
       if (!legendDiv) return;
       legendDiv.innerHTML = "";
-      const nodeParamBg = getComputedCssVar(CSS_VARS.BN_NODE_PARAM_BG);
-      const nodeOutcomeBg = getComputedCssVar(CSS_VARS.BN_NODE_OUTCOME_BG);
-      const edgeColor = getComputedCssVar(CSS_VARS.BN_EDGE_COLOR);
-      const posEdgeColor = getComputedCssVar(CSS_VARS.BN_EDGE_COLOR_POSITIVE);
-      const negEdgeColor = getComputedCssVar(CSS_VARS.BN_EDGE_COLOR_NEGATIVE);
-      const plantColor = getComputedCssVar(CSS_VARS.BN_GROUP_PLANT);
-      const preyColor = getComputedCssVar(CSS_VARS.BN_GROUP_PREY);
-      const predColor = getComputedCssVar(CSS_VARS.BN_GROUP_PREDATOR);
-      const derivedColor = getComputedCssVar(CSS_VARS.BN_GROUP_DERIVED);
-      const outcomeColor = getComputedCssVar(CSS_VARS.BN_GROUP_OUTCOME);
+      const nodeParamBg = cachedCssVars[CSS_VARS.BN_NODE_PARAM_BG];
+      const nodeOutcomeBg = cachedCssVars[CSS_VARS.BN_NODE_OUTCOME_BG];
+      const edgeColor = cachedCssVars[CSS_VARS.BN_EDGE_COLOR];
+      const posEdgeColor = cachedCssVars[CSS_VARS.BN_EDGE_COLOR_POSITIVE];
+      const negEdgeColor = cachedCssVars[CSS_VARS.BN_EDGE_COLOR_NEGATIVE];
+      const plantColor = cachedCssVars[CSS_VARS.BN_GROUP_PLANT];
+      const preyColor = cachedCssVars[CSS_VARS.BN_GROUP_PREY];
+      const predColor = cachedCssVars[CSS_VARS.BN_GROUP_PREDATOR];
+      const derivedColor = cachedCssVars[CSS_VARS.BN_GROUP_DERIVED];
+      const outcomeColor = cachedCssVars[CSS_VARS.BN_GROUP_OUTCOME];
       legendDiv.appendChild(createLegendItem(plantColor, 'Plant'));
       legendDiv.appendChild(createLegendItem(preyColor, 'Prey'));
       legendDiv.appendChild(createLegendItem(predColor, 'Predator'));
@@ -4657,55 +4680,55 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
       const histories = [
         {
           data: bnPredictionHistory.plantExtinctionProb,
-          color: getComputedCssVar(CSS_VARS.PLANT_COLOR),
+          color: cachedCssVars[CSS_VARS.PLANT_COLOR],
           lineWidth: 1.5,
           label: "P(Plant Extinct)",
           visible: true
         },
         {
           data: bnPredictionHistory.preyExtinctionProb,
-          color: getComputedCssVar(CSS_VARS.PREY_COLOR),
+          color: cachedCssVars[CSS_VARS.PREY_COLOR],
           lineWidth: 1.5,
           label: "P(Prey Extinct)",
           visible: true
         },
         {
           data: bnPredictionHistory.predatorExtinctionProb,
-          color: getComputedCssVar(CSS_VARS.PREDATOR_COLOR),
+          color: cachedCssVars[CSS_VARS.PREDATOR_COLOR],
           lineWidth: 1.5,
           label: "P(Pred Extinct)",
           visible: true
         },
         { data: bnPredictionHistory.favorableGrowthPlantProb,
-          color: modifyHslColor(getComputedCssVar(CSS_VARS.PLANT_COLOR), 1, 1.2),
+          color: modifyHslColor(cachedCssVars[CSS_VARS.PLANT_COLOR], 1, 1.2),
           lineWidth: 1.5,
           label: "P(Plant Growth)",
           visible: true
         },
         {
           data: bnPredictionHistory.favorableGrowthPreyProb,
-          color: modifyHslColor(getComputedCssVar(CSS_VARS.PREY_COLOR), 1, 1.2),
+          color: modifyHslColor(cachedCssVars[CSS_VARS.PREY_COLOR], 1, 1.2),
           lineWidth: 1.5,
           label: "P(Prey Growth)",
           visible: true
         },
         {
           data: bnPredictionHistory.favorableGrowthPredatorProb,
-          color: modifyHslColor(getComputedCssVar(CSS_VARS.PREDATOR_COLOR), 1, 1.2),
+          color: modifyHslColor(cachedCssVars[CSS_VARS.PREDATOR_COLOR], 1, 1.2),
           lineWidth: 1.5,
           label: "P(Pred Growth)",
           visible: true
         }, // Lighter pred color
         { 
           data: bnPredictionHistory.preyStarvationRiskProb,
-          color: modifyHslColor(getComputedCssVar(CSS_VARS.PREY_COLOR), 0.8, 0.8),
+          color: modifyHslColor(cachedCssVars[CSS_VARS.PREY_COLOR], 0.8, 0.8),
           lineWidth: 1.5, 
           label: "P(Prey Starv. Risk)", 
           visible: true 
         },
         { 
           data: bnPredictionHistory.predatorStarvationRiskProb, 
-          color: modifyHslColor(getComputedCssVar(CSS_VARS.PREDATOR_COLOR), 0.8, 0.8), 
+          color: modifyHslColor(cachedCssVars[CSS_VARS.PREDATOR_COLOR], 0.8, 0.8), 
           lineWidth: 1.5, 
           label: "P(Pred Starv. Risk)", 
           visible: true 
@@ -4714,9 +4737,9 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
     function drawBNPredictionExtinctionGraph() {
       const yMax = 1.05;
       const histories = [
-        { data: bnPredictionHistory.plantExtinctionProb, color: getComputedCssVar(CSS_VARS.PLANT_COLOR), lineWidth: 1.5, label: "P(Plant Extinct)", visible: true },
-        { data: bnPredictionHistory.preyExtinctionProb, color: getComputedCssVar(CSS_VARS.PREY_COLOR), lineWidth: 1.5, label: "P(Prey Extinct)", visible: true },
-        { data: bnPredictionHistory.predatorExtinctionProb, color: getComputedCssVar(CSS_VARS.PREDATOR_COLOR), lineWidth: 1.5, label: "P(Pred Extinct)", visible: true }
+        { data: bnPredictionHistory.plantExtinctionProb, color: cachedCssVars[CSS_VARS.PLANT_COLOR], lineWidth: 1.5, label: "P(Plant Extinct)", visible: true },
+        { data: bnPredictionHistory.preyExtinctionProb, color: cachedCssVars[CSS_VARS.PREY_COLOR], lineWidth: 1.5, label: "P(Prey Extinct)", visible: true },
+        { data: bnPredictionHistory.predatorExtinctionProb, color: cachedCssVars[CSS_VARS.PREDATOR_COLOR], lineWidth: 1.5, label: "P(Pred Extinct)", visible: true }
       ];
       drawGenericGraph(bnPredictionExtinctionGraphCtx, bnPredictionExtinctionGraphCanvas, histories, bnPredictionHistory.maxLength, yMax, true);
       if (DOM_ELEMENTS.bnPredictionExtinctionGraphLegend) {
@@ -4727,9 +4750,9 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
     function drawBNPredictionGrowthGraph() {
       const yMax = 1.05;
       const histories = [
-        { data: bnPredictionHistory.favorableGrowthPlantProb, color: modifyHslColor(getComputedCssVar(CSS_VARS.PLANT_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Plant Growth)", visible: true },
-        { data: bnPredictionHistory.favorableGrowthPreyProb, color: modifyHslColor(getComputedCssVar(CSS_VARS.PREY_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Prey Growth)", visible: true },
-        { data: bnPredictionHistory.favorableGrowthPredatorProb, color: modifyHslColor(getComputedCssVar(CSS_VARS.PREDATOR_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Pred Growth)", visible: true }
+        { data: bnPredictionHistory.favorableGrowthPlantProb, color: modifyHslColor(cachedCssVars[CSS_VARS.PLANT_COLOR], 1, 1.2), lineWidth: 1.5, label: "P(Plant Growth)", visible: true },
+        { data: bnPredictionHistory.favorableGrowthPreyProb, color: modifyHslColor(cachedCssVars[CSS_VARS.PREY_COLOR], 1, 1.2), lineWidth: 1.5, label: "P(Prey Growth)", visible: true },
+        { data: bnPredictionHistory.favorableGrowthPredatorProb, color: modifyHslColor(cachedCssVars[CSS_VARS.PREDATOR_COLOR], 1, 1.2), lineWidth: 1.5, label: "P(Pred Growth)", visible: true }
       ];
       drawGenericGraph(bnPredictionGrowthGraphCtx, bnPredictionGrowthGraphCanvas, histories, bnPredictionHistory.maxLength, yMax, true);
       if (DOM_ELEMENTS.bnPredictionGrowthGraphLegend) {
@@ -4740,8 +4763,8 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
     function drawBNPredictionStarvationGraph() {
       const yMax = 1.05;
       const histories = [
-        { data: bnPredictionHistory.preyStarvationRiskProb, color: modifyHslColor(getComputedCssVar(CSS_VARS.PREY_COLOR), 0.8, 0.8), lineWidth: 1.5, label: "P(Prey Starv. Risk)", visible: true },
-        { data: bnPredictionHistory.predatorStarvationRiskProb, color: modifyHslColor(getComputedCssVar(CSS_VARS.PREDATOR_COLOR), 0.8, 0.8), lineWidth: 1.5, label: "P(Pred Starv. Risk)", visible: true }
+        { data: bnPredictionHistory.preyStarvationRiskProb, color: modifyHslColor(cachedCssVars[CSS_VARS.PREY_COLOR], 0.8, 0.8), lineWidth: 1.5, label: "P(Prey Starv. Risk)", visible: true },
+        { data: bnPredictionHistory.predatorStarvationRiskProb, color: modifyHslColor(cachedCssVars[CSS_VARS.PREDATOR_COLOR], 0.8, 0.8), lineWidth: 1.5, label: "P(Pred Starv. Risk)", visible: true }
       ];
       drawGenericGraph(bnPredictionStarvationGraphCtx, bnPredictionStarvationGraphCanvas, histories, bnPredictionHistory.maxLength, yMax, true);
       if (DOM_ELEMENTS.bnPredictionStarvationGraphLegend) {
@@ -4762,7 +4785,7 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
       const histories = [
         {
           data: bnPredictionErrorHistory.errors,
-          color: getComputedCssVar(CSS_VARS.GRAPH_BN_ERROR_COLOR),
+          color: cachedCssVars[CSS_VARS.GRAPH_BN_ERROR_COLOR],
           lineWidth: 1.5,
           label: 'Avg Abs Error'
         }
@@ -4777,9 +4800,9 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
     function drawGenericGraph(graphCtxLocal, canvasLocal, histories, maxLength, fixedYMax = null, scaleYForProbability = false, areaMode = false, stackedArea = false) {
       if (!canvasLocal || canvasLocal.width === 0 || canvasLocal.height === 0) return;
 
-      const bgColor = getComputedCssVar(CSS_VARS.BG_COLOR);
-      const gridColor = getComputedCssVar(CSS_VARS.GRAPH_GRID_COLOR);
-      const textColor = getComputedCssVar(CSS_VARS.TEXT_COLOR_DARKER);
+      const bgColor = cachedCssVars[CSS_VARS.BG_COLOR];
+      const gridColor = cachedCssVars[CSS_VARS.GRAPH_GRID_COLOR];
+      const textColor = cachedCssVars[CSS_VARS.TEXT_COLOR_DARKER];
 
       graphCtxLocal.fillStyle = bgColor;
       graphCtxLocal.fillRect(0, 0, canvasLocal.width, canvasLocal.height);
