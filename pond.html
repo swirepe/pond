@@ -938,6 +938,7 @@
     };
 
     const bnPredictionHistory = { // New history object for BN predictions
+      plantExtinctionProb: [],
       preyExtinctionProb: [],
       predatorExtinctionProb: [],
       favorableGrowthPlantProb: [],
@@ -1873,7 +1874,7 @@
 
     // Predicts extinction probabilities for given candidate parameters
     function predictExtinctionProbabilities(candidateBaseParams) {
-      const defaultPred = { prey: 0.5, predator: 0.5, error: "BN not ready or error" };
+      const defaultPred = { plant: 0.5, prey: 0.5, predator: 0.5, error: "BN not ready or error" };
       if (!isBNReady()) return defaultPred;
 
       const candidateFullParams = getFullParamsWithDerived(candidateBaseParams);
@@ -1892,6 +1893,7 @@
         return (node.cpt[cptKey] && node.cpt[cptKey]['true'] !== undefined) ? node.cpt[cptKey]['true'] : 0.5; // Prob of 'true'
       };
 
+      preds.plant = 1 - getProb(BN_NODE_NAMES.FAVORABLE_GROWTH_PLANT);
       preds.prey = getProb(BN_NODE_NAMES.PREY_EXTINCTION);
       preds.predator = getProb(BN_NODE_NAMES.PREDATOR_EXTINCTION);
       return preds;
@@ -3447,7 +3449,7 @@ function updateCurrentBNPredictionsDisplay() {
       autoPilotStats.lastGpVariance = bestCandidate.debug_gp_variance;
 
       bnPredictionsForNextRun = {
-        extinction: isBNReady() ? predictExtinctionProbabilities(bestCandidate.params) : { prey: 0.5, predator: 0.5, error: "BN not ready" },
+        extinction: isBNReady() ? predictExtinctionProbabilities(bestCandidate.params) : { plant: 0.5, prey: 0.5, predator: 0.5, error: "BN not ready" },
         growth: isBNReady() ? predictFavorableGrowth(bestCandidate.params) : { plant: 0.5, prey: 0.5, predator: 0.5, error: "BN not ready" },
         starvationRisk: isBNReady() ? predictStarvationRiskProbabilities(bestCandidate.params) : { prey: 0.5, predator: 0.5, error: "BN not ready" },
       };
@@ -3791,6 +3793,7 @@ function displayPastRunDetails(runIndex) {
         populateGraphLegend('pastCumulativeGraphLegend', cumHistories);
 
         const bnHistories = [
+            { data: runData.bnPredictionGraphHistory.plantExtinctionProb || [], color: getComputedCssVar(CSS_VARS.PLANT_COLOR), lineWidth: 1.5, label: "P(Plant Extinct)" },
             { data: runData.bnPredictionGraphHistory.preyExtinctionProb || [], color: getComputedCssVar(CSS_VARS.PREY_COLOR), lineWidth: 1.5, label: "P(Prey Extinct)" },
             { data: runData.bnPredictionGraphHistory.predatorExtinctionProb || [], color: getComputedCssVar(CSS_VARS.PREDATOR_COLOR), lineWidth: 1.5, label: "P(Pred Extinct)" },
             { data: runData.bnPredictionGraphHistory.favorableGrowthPlantProb || [], color: modifyHslColor(getComputedCssVar(CSS_VARS.PLANT_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Plant Growth)" },
@@ -4184,9 +4187,11 @@ function displayPastRunDetails(runIndex) {
             const starvPredsHist = predictStarvationRiskProbabilities(paramsForLiveGraph);
 
             if (!extPredsHist.error) {
+                bnPredictionHistory.plantExtinctionProb.push(extPredsHist.plant);
                 bnPredictionHistory.preyExtinctionProb.push(extPredsHist.prey);
                 bnPredictionHistory.predatorExtinctionProb.push(extPredsHist.predator);
             } else {
+                bnPredictionHistory.plantExtinctionProb.push(0.5);
                 bnPredictionHistory.preyExtinctionProb.push(0.5);
                 bnPredictionHistory.predatorExtinctionProb.push(0.5);
             }
@@ -4563,27 +4568,79 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
     function drawBNPredictionGraph() {
       const yMax = 1.05; // Probabilities are 0-1, give a little padding
       const histories = [
-        { data: bnPredictionHistory.preyExtinctionProb, color: getComputedCssVar(CSS_VARS.PREY_COLOR), lineWidth: 1.5, label: "P(Prey Extinct)", visible: true },
-        { data: bnPredictionHistory.predatorExtinctionProb, color: getComputedCssVar(CSS_VARS.PREDATOR_COLOR), lineWidth: 1.5, label: "P(Pred Extinct)", visible: true },
-        { data: bnPredictionHistory.favorableGrowthPlantProb, color: modifyHslColor(getComputedCssVar(CSS_VARS.PLANT_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Plant Growth)", visible: true },
-        { data: bnPredictionHistory.favorableGrowthPreyProb, color: modifyHslColor(getComputedCssVar(CSS_VARS.PREY_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Prey Growth)", visible: true },
-        { data: bnPredictionHistory.favorableGrowthPredatorProb, color: modifyHslColor(getComputedCssVar(CSS_VARS.PREDATOR_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Pred Growth)", visible: true },
-        { data: bnPredictionHistory.preyStarvationRiskProb, color: modifyHslColor(getComputedCssVar(CSS_VARS.PREY_COLOR), 0.8, 0.8), lineWidth: 1.5, label: "P(Prey Starv. Risk)", visible: true },
-        { data: bnPredictionHistory.predatorStarvationRiskProb, color: modifyHslColor(getComputedCssVar(CSS_VARS.PREDATOR_COLOR), 0.8, 0.8), lineWidth: 1.5, label: "P(Pred Starv. Risk)", visible: true }
+        {
+          data: bnPredictionHistory.plantExtinctionProb,
+          color: getComputedCssVar(CSS_VARS.PLANT_COLOR),
+          lineWidth: 1.5,
+          label: "P(Plant Extinct)",
+          visible: true
+        },
+        {
+          data: bnPredictionHistory.preyExtinctionProb,
+          color: getComputedCssVar(CSS_VARS.PREY_COLOR),
+          lineWidth: 1.5,
+          label: "P(Prey Extinct)",
+          visible: true
+        },
+        {
+          data: bnPredictionHistory.predatorExtinctionProb,
+          color: getComputedCssVar(CSS_VARS.PREDATOR_COLOR),
+          lineWidth: 1.5,
+          label: "P(Pred Extinct)",
+          visible: true
+        },
+        { data: bnPredictionHistory.favorableGrowthPlantProb,
+          color: modifyHslColor(getComputedCssVar(CSS_VARS.PLANT_COLOR), 1, 1.2),
+          lineWidth: 1.5,
+          label: "P(Plant Growth)",
+          visible: true
+        },
+        {
+          data: bnPredictionHistory.favorableGrowthPreyProb,
+          color: modifyHslColor(getComputedCssVar(CSS_VARS.PREY_COLOR), 1, 1.2),
+          lineWidth: 1.5,
+          label: "P(Prey Growth)",
+          visible: true
+        },
+        {
+          data: bnPredictionHistory.favorableGrowthPredatorProb,
+          color: modifyHslColor(getComputedCssVar(CSS_VARS.PREDATOR_COLOR), 1, 1.2),
+          lineWidth: 1.5,
+          label: "P(Pred Growth)",
+          visible: true
+        }, // Lighter pred color
+        { 
+          data: bnPredictionHistory.preyStarvationRiskProb,
+          color: modifyHslColor(getComputedCssVar(CSS_VARS.PREY_COLOR), 0.8, 0.8),
+          lineWidth: 1.5, 
+          label: "P(Prey Starv. Risk)", 
+          visible: true 
+        },
+        { 
+          data: bnPredictionHistory.predatorStarvationRiskProb, 
+          color: modifyHslColor(getComputedCssVar(CSS_VARS.PREDATOR_COLOR), 0.8, 0.8), 
+          lineWidth: 1.5, 
+          label: "P(Pred Starv. Risk)", 
+          visible: true 
+        }
       ];
 
-        // Use a slightly modified generic graph drawing function for probabilities 0-1
-        drawGenericGraph(bnPredictionGraphCtx, bnPredictionGraphCanvas, histories, bnPredictionHistory.maxLength, yMax, true);
+      drawGenericGraph(bnPredictionGraphCtx, bnPredictionGraphCanvas, histories, bnPredictionHistory.maxLength, yMax, true);
 
-        if (DOM_ELEMENTS.bnPredictionGraphLegend) {
-          populateGraphLegend('bnPredictionGraphLegend', histories, drawBNPredictionGraph);
-        }
+      if (DOM_ELEMENTS.bnPredictionGraphLegend) {
+        populateGraphLegend('bnPredictionGraphLegend', histories, drawBNPredictionGraph);
+      }
     }
 
     function drawBNPredictionErrorGraph() {
       const yMax = 1.05;
       const histories = [
-        { data: bnPredictionErrorHistory.errors, color: getComputedCssVar(CSS_VARS.GRAPH_BN_ERROR_COLOR), lineWidth: 1.5, label: 'Avg Abs Error' }
+        {
+          data: bnPredictionErrorHistory.errors,
+          color: getComputedCssVar(CSS_VARS.GRAPH_BN_ERROR_COLOR),
+          lineWidth: 1.5,
+          label: 'Avg Abs Error'
+        }
       ];
       drawGenericGraph(bnPredictionErrorGraphCtx, bnPredictionErrorGraphCanvas, histories, bnPredictionErrorHistory.maxLength, yMax, true);
       if (DOM_ELEMENTS.bnPredictionErrorGraphLegend) {
