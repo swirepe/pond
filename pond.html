@@ -1204,73 +1204,89 @@
         // console.log("BN validation successful: No cycles found.");
       }
 
-      // Monte Carlo Inference (Likelihood Weighting or similar for mixed networks)
+      // Monte Carlo Inference using simple likelihood weighting
+      // `samples` controls the number of forward samples to generate.  Each
+      // sample receives a weight based on the likelihood of the given evidence
+      // under that sample.  Weighted counts/values are then used to estimate
+      // the desired probabilities or statistics.
       monteCarloInference(queryVar, evidence = {}, samples = 1000) {
         const queryNode = this.nodes.get(queryVar);
         if (!queryNode) return { error: `Node ${queryVar} not found` };
 
-        const acceptedSamplesValues = [];
-        let attempts = 0;
-        const maxAttempts = samples * 20; // Try more times to get enough samples matching evidence
+        // Prepare accumulators
+        let totalWeight = 0;
+        const weightedValues = [];
+        const discreteCounts = queryNode.type === 'discrete'
+          ? queryNode.states.reduce((acc, s) => { acc[s] = 0; return acc; }, {})
+          : null;
 
-        while (acceptedSamplesValues.length < samples && attempts < maxAttempts) {
-          attempts++;
-          const sample = this.forwardSample(); // Using simple forward sampling
+        for (let i = 0; i < samples; i++) {
+          const sample = this.forwardSample();
           if (!sample) continue; // Should not happen with a valid network
 
-          // Check if sample matches evidence
-          let matches = true;
-          for (const [evidenceVar, evidenceValue] of Object.entries(evidence)) {
-            const evidenceNode = this.nodes.get(evidenceVar);
-            if (!evidenceNode) { matches = false; break; }
+          // Compute likelihood weight of this sample given evidence
+          let weight = 1;
+          for (const [eVar, eVal] of Object.entries(evidence)) {
+            const eNode = this.nodes.get(eVar);
+            if (!eNode) { weight = 0; break; }
 
-            if (evidenceNode.type === 'discrete') {
-              if (sample[evidenceVar] !== evidenceValue) { matches = false; break; }
-            } else { // Continuous evidence (approximate match)
-              const tolerance = (evidenceNode.max - evidenceNode.min) * 0.1; // 10% tolerance
-              if (Math.abs(sample[evidenceVar] - evidenceValue) > tolerance && tolerance > 0) { matches = false; break; }
-              else if (tolerance === 0 && sample[evidenceVar] !== evidenceValue) { matches = false; break; } // Exact match if no range
+            const parentVals = {};
+            eNode.parents.forEach(p => { parentVals[p.name] = sample[p.name]; });
+
+            if (eNode.type === 'discrete') {
+              weight *= eNode.getProbability(eVal, parentVals);
+            } else {
+              weight *= eNode.getProbabilityDensity(eVal, parentVals);
             }
+
+            if (weight === 0) break; // Early exit if impossible
           }
 
-          if (matches) {
-            acceptedSamplesValues.push(sample[queryVar]);
+          if (weight === 0) continue;
+
+          totalWeight += weight;
+          const qVal = sample[queryVar];
+
+          if (queryNode.type === 'discrete') {
+            if (discreteCounts[qVal] !== undefined) {
+              discreteCounts[qVal] += weight;
+            }
+          } else {
+            weightedValues.push({ value: qVal, weight });
           }
         }
 
-        if (acceptedSamplesValues.length === 0) {
+        if (totalWeight === 0) {
           return {
             type: queryNode.type,
-            error: 'No samples matched evidence',
+            error: 'No samples had non-zero weight',
             samples: 0,
-            distribution: queryNode.type === 'discrete' ? queryNode.states.reduce((acc, state) => { acc[state] = 0; return acc; }, {}) : {},
-            mean: NaN, stdDev: NaN
+            distribution: queryNode.type === 'discrete'
+              ? queryNode.states.reduce((acc, state) => { acc[state] = 0; return acc; }, {})
+              : {},
+            mean: NaN,
+            stdDev: NaN
           };
         }
 
         if (queryNode.type === 'discrete') {
-          const counts = queryNode.states.reduce((acc, state) => { acc[state] = 0; return acc; }, {});
-          for (const value of acceptedSamplesValues) {
-            if (counts[value] !== undefined) counts[value]++;
-          }
-          const total = acceptedSamplesValues.length;
           const probabilities = {};
-          for (const [state, count] of Object.entries(counts)) {
-            probabilities[state] = count / total;
+          for (const [state, count] of Object.entries(discreteCounts)) {
+            probabilities[state] = count / totalWeight;
           }
-          return { type: 'discrete', distribution: probabilities, samples: total };
+          return { type: 'discrete', distribution: probabilities, samples };
         } else { // Continuous query variable
-          const n = acceptedSamplesValues.length;
-          const mean = acceptedSamplesValues.reduce((sum, val) => sum + val, 0) / n;
-          const variance = acceptedSamplesValues.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / n;
+          const mean = weightedValues.reduce((sum, v) => sum + v.value * v.weight, 0) / totalWeight;
+          const variance = weightedValues.reduce((sum, v) => sum + v.weight * Math.pow(v.value - mean, 2), 0) / totalWeight;
+          const values = weightedValues.map(v => v.value);
           return {
             type: 'continuous',
             mean,
             variance,
             stdDev: Math.sqrt(variance),
-            min: Math.min(...acceptedSamplesValues),
-            max: Math.max(...acceptedSamplesValues),
-            samples: n
+            min: Math.min(...values),
+            max: Math.max(...values),
+            samples
           };
         }
       }
