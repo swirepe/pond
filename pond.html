@@ -4515,25 +4515,59 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
     function drawBNPredictionGraph() {
       const yMax = 1.05; // Probabilities are 0-1, give a little padding
       const histories = [
-        { data: bnPredictionHistory.plantExtinctionProb, color: getComputedCssVar(CSS_VARS.PLANT_COLOR), lineWidth: 1.5, label: "P(Plant Extinct)", visible: true },
-        { data: bnPredictionHistory.preyExtinctionProb, color: getComputedCssVar(CSS_VARS.PREY_COLOR), lineWidth: 1.5, label: "P(Prey Extinct)", visible: true },
-        { data: bnPredictionHistory.predatorExtinctionProb, color: getComputedCssVar(CSS_VARS.PREDATOR_COLOR), lineWidth: 1.5, label: "P(Pred Extinct)", visible: true },
-        { data: bnPredictionHistory.favorableGrowthPreyProb, color: modifyHslColor(getComputedCssVar(CSS_VARS.PREY_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Prey Growth)", visible: true },
-        { data: bnPredictionHistory.favorableGrowthPredatorProb, color: modifyHslColor(getComputedCssVar(CSS_VARS.PREDATOR_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Pred Growth)", visible: true } // Lighter pred color
+        {
+          data: bnPredictionHistory.plantExtinctionProb,
+          color: getComputedCssVar(CSS_VARS.PLANT_COLOR),
+          lineWidth: 1.5,
+          label: "P(Plant Extinct)",
+          visible: true
+        },
+        {
+          data: bnPredictionHistory.preyExtinctionProb,
+          color: getComputedCssVar(CSS_VARS.PREY_COLOR),
+          lineWidth: 1.5,
+          label: "P(Prey Extinct)",
+          visible: true
+        },
+        {
+          data: bnPredictionHistory.predatorExtinctionProb,
+          color: getComputedCssVar(CSS_VARS.PREDATOR_COLOR),
+          lineWidth: 1.5,
+          label: "P(Pred Extinct)",
+          visible: true
+        },
+        {
+          data: bnPredictionHistory.favorableGrowthPreyProb,
+          color: modifyHslColor(getComputedCssVar(CSS_VARS.PREY_COLOR), 1, 1.2),
+          lineWidth: 1.5,
+          label: "P(Prey Growth)",
+          visible: true
+        },
+        {
+          data: bnPredictionHistory.favorableGrowthPredatorProb,
+          color: modifyHslColor(getComputedCssVar(CSS_VARS.PREDATOR_COLOR), 1, 1.2),
+          lineWidth: 1.5,
+          label: "P(Pred Growth)",
+          visible: true
+        } // Lighter pred color
       ];
 
-        // Use a slightly modified generic graph drawing function for probabilities 0-1
-        drawGenericGraph(bnPredictionGraphCtx, bnPredictionGraphCanvas, histories, bnPredictionHistory.maxLength, yMax, true);
+      drawGenericGraph(bnPredictionGraphCtx, bnPredictionGraphCanvas, histories, bnPredictionHistory.maxLength, yMax, true);
 
-        if (DOM_ELEMENTS.bnPredictionGraphLegend) {
-          populateGraphLegend('bnPredictionGraphLegend', histories, drawBNPredictionGraph);
-        }
+      if (DOM_ELEMENTS.bnPredictionGraphLegend) {
+        populateGraphLegend('bnPredictionGraphLegend', histories, drawBNPredictionGraph);
+      }
     }
 
     function drawBNPredictionErrorGraph() {
       const yMax = 1.05;
       const histories = [
-        { data: bnPredictionErrorHistory.errors, color: getComputedCssVar(CSS_VARS.GRAPH_BN_ERROR_COLOR), lineWidth: 1.5, label: 'Avg Abs Error' }
+        {
+          data: bnPredictionErrorHistory.errors,
+          color: getComputedCssVar(CSS_VARS.GRAPH_BN_ERROR_COLOR),
+          lineWidth: 1.5,
+          label: 'Avg Abs Error'
+        }
       ];
       drawGenericGraph(bnPredictionErrorGraphCtx, bnPredictionErrorGraphCanvas, histories, bnPredictionErrorHistory.maxLength, yMax, true);
       if (DOM_ELEMENTS.bnPredictionErrorGraphLegend) {
