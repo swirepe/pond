@@ -2249,6 +2249,7 @@ function updateCurrentBNPredictionsDisplay() {
     function normalizeAngle(angle) { while (angle > Math.PI) angle -= 2 * Math.PI; while (angle < -Math.PI) angle += 2 * Math.PI; return angle; }
     function clamp(val, min, max) { return Math.min(Math.max(val, min), max); }
     function weightedRandomSelect(options) { if (!options || options.length === 0) return null; const totalWeight = options.reduce((sum, option) => sum + Math.max(0, option.weight), 0); if (totalWeight <= 0) { return options.length > 0 ? options[randomInt(0, options.length - 1)].item : null; } let randomVal = Math.random() * totalWeight; for (const option of options) { const currentWeight = Math.max(0, option.weight); if (randomVal < currentWeight) return option.item; randomVal -= currentWeight; } return options.length > 0 ? options[options.length - 1].item : null; }
+    function isInCurrentNode(entity) { return entity._qtNode && entity._qtNode.contains(entity.pos.x, entity.pos.y); }
 
     function parseHslString(hslString) {
       if (!hslString || typeof hslString !== 'string') return null;
@@ -2380,7 +2381,9 @@ function updateCurrentBNPredictionsDisplay() {
           this.vel.limit(this.maxSpeed);
           this.pos.add(this.vel);
           this.keepInBounds();
-          quadtree.update(this);
+          if (!isInCurrentNode(this)) {
+            quadtree.update(this);
+          }
         }
         return true; // Still in simulation
       }
