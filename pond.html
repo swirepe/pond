@@ -2363,6 +2363,7 @@ function updateCurrentBNPredictionsDisplay() {
     class Plant extends Entity {
       constructor(x, y) {
         super(x, y, 3);
+        this.type = 'plant';
         this.health = config.plantHealth;
         this.baseColor = getComputedCssVar(CSS_VARS.PLANT_COLOR);
         this.color = this.baseColor; // May be modified by animations
@@ -2477,6 +2478,7 @@ function updateCurrentBNPredictionsDisplay() {
     class Prey extends Entity {
       constructor(x, y) {
         super(x, y, config.preyRadius);
+        this.type = 'prey';
         this.health = config.preyHealth;
         this.maxSpeed = config.preyMaxSpeed;
         this.agility = config.preyAgility;
@@ -2736,6 +2738,7 @@ function updateCurrentBNPredictionsDisplay() {
     class Predator extends Entity {
       constructor(x, y) {
         super(x, y, config.predatorRadius);
+        this.type = 'predator';
         this.health = config.predatorHealth;
         this.maxSpeed = config.predatorMaxSpeed;
         this.agility = config.predatorAgility;
