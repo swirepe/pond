@@ -4838,13 +4838,20 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
           label: "P(Prey Starv. Risk)", 
           visible: true 
         },
-        { 
-          data: bnPredictionHistory.predatorStarvationRiskProb, 
-          color: modifyHslColor(getComputedCssVar(CSS_VARS.PREDATOR_COLOR), 0.8, 0.8), 
-          lineWidth: 1.5, 
-          label: "P(Pred Starv. Risk)", 
-          visible: true 
-  }
+        {
+          data: bnPredictionHistory.predatorStarvationRiskProb,
+          color: modifyHslColor(getComputedCssVar(CSS_VARS.PREDATOR_COLOR), 0.8, 0.8),
+          lineWidth: 1.5,
+          label: "P(Pred Starv. Risk)",
+          visible: true
+        }
+      ];
+
+      drawGenericGraph(bnPredictionGraphCtx, bnPredictionGraphCanvas, histories, bnPredictionHistory.maxLength, yMax, true);
+      if (DOM_ELEMENTS.bnPredictionGraphLegend) {
+        populateGraphLegend('bnPredictionGraphLegend', histories, drawBNPredictionGraph);
+      }
+    }
 
     function drawBNPredictionExtinctionGraph() {
       const yMax = 1.05;
@@ -4881,14 +4888,6 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
       drawGenericGraph(bnPredictionStarvationGraphCtx, bnPredictionStarvationGraphCanvas, histories, bnPredictionHistory.maxLength, yMax, true);
       if (DOM_ELEMENTS.bnPredictionStarvationGraphLegend) {
         populateGraphLegend('bnPredictionStarvationGraphLegend', histories, drawBNPredictionStarvationGraph);
-      }
-    }
-      ];
-
-      drawGenericGraph(bnPredictionGraphCtx, bnPredictionGraphCanvas, histories, bnPredictionHistory.maxLength, yMax, true);
-
-      if (DOM_ELEMENTS.bnPredictionGraphLegend) {
-        populateGraphLegend('bnPredictionGraphLegend', histories, drawBNPredictionGraph);
       }
     }
 
