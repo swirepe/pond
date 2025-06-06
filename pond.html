@@ -941,6 +941,7 @@
       plantExtinctionProb: [],
       preyExtinctionProb: [],
       predatorExtinctionProb: [],
+      favorableGrowthPlantProb: [],
       favorableGrowthPreyProb: [],
       favorableGrowthPredatorProb: [],
       maxLength: 200
@@ -1004,6 +1005,10 @@
     const BN_DEFAULT_BIN_COUNT = 3; // Default number of bins for discretizing continuous parameters
     const BN_LAPLACE_SMOOTHING = 1; // Laplace smoothing value for CPTs
     const BN_AUTOPILOT_PREDICTION_THRESHOLD = 0.80; // For BN scoring, how confident for "favorable growth"
+
+    const BN_MAX_BIN_COUNT = 6; // Upper limit for adaptive binning
+    const BN_BIN_EXPAND_RUN_THRESHOLD = 30; // Runs needed to add another bin
+    let bnCurrentBinCount = BN_DEFAULT_BIN_COUNT; // Tracks the active bin count
 
     const AUTOPILOT_CANDIDATE_POOL_SIZE = 1000;
     const AUTOPILOT_PROPORTION_PERTURB = 0.5;
@@ -1569,6 +1574,38 @@
         calculate: (p, globalConf) => (p.predatorMaxHealth - globalConf.predatorReproductionCost) / Math.max(1, p.predatorReproductionCooldown * p.predatorHungerRate)
       },
     ];
+    function applyBinCountToConfigs(count) {
+      bnParamNodesConfigBase.forEach(c => c.binCount = count);
+      bnDerivedParamNodesConfig.forEach(c => c.binCount = count);
+    }
+
+    function adaptBNBinCountIfNeeded() {
+      const desired = Math.min(BN_MAX_BIN_COUNT,
+        BN_DEFAULT_BIN_COUNT + Math.floor(completedRuns.length / BN_BIN_EXPAND_RUN_THRESHOLD));
+      const needRebuild = !simBayesianNetwork || desired !== bnCurrentBinCount;
+      if (!needRebuild) return;
+
+      bnCurrentBinCount = desired;
+      applyBinCountToConfigs(bnCurrentBinCount);
+
+      bnPreyExtinctionCPTCounters = {};
+      bnPredatorExtinctionCPTCounters = {};
+      bnFavorableGrowthPlantCPTCounters = {};
+      bnFavorableGrowthPreyCPTCounters = {};
+      bnFavorableGrowthPredatorCPTCounters = {};
+      bnPreyStarvationRiskCPTCounters = {};
+      bnPredatorStarvationRiskCPTCounters = {};
+
+      initBN();
+
+      completedRuns.forEach(run => {
+        if (run.durationFrames > 30) {
+          updateBNWithRunData(run);
+        }
+      });
+    }
+
+    applyBinCountToConfigs(bnCurrentBinCount);
     let allBnParamAndDerivedNodeConfigs = []; // Will be populated in initBN
 
     function getBNMinRunsForPrediction() {
@@ -3485,6 +3522,8 @@ function updateCurrentBNPredictionsDisplay() {
       if (simBayesianNetwork && currentRunFrameCounter > 30) {
         updateBNWithRunData(runData);
       }
+
+      adaptBNBinCountIfNeeded();
     }
 
     function drawSinglePastRunSummaryGraph(canvasEl, runData) {
@@ -3755,6 +3794,7 @@ function displayPastRunDetails(runIndex) {
             { data: runData.bnPredictionGraphHistory.plantExtinctionProb || [], color: getComputedCssVar(CSS_VARS.PLANT_COLOR), lineWidth: 1.5, label: "P(Plant Extinct)" },
             { data: runData.bnPredictionGraphHistory.preyExtinctionProb || [], color: getComputedCssVar(CSS_VARS.PREY_COLOR), lineWidth: 1.5, label: "P(Prey Extinct)" },
             { data: runData.bnPredictionGraphHistory.predatorExtinctionProb || [], color: getComputedCssVar(CSS_VARS.PREDATOR_COLOR), lineWidth: 1.5, label: "P(Pred Extinct)" },
+            { data: runData.bnPredictionGraphHistory.favorableGrowthPlantProb || [], color: modifyHslColor(getComputedCssVar(CSS_VARS.PLANT_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Plant Growth)" },
             { data: runData.bnPredictionGraphHistory.favorableGrowthPreyProb || [], color: modifyHslColor(getComputedCssVar(CSS_VARS.PREY_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Prey Growth)" },
             { data: runData.bnPredictionGraphHistory.favorableGrowthPredatorProb || [], color: modifyHslColor(getComputedCssVar(CSS_VARS.PREDATOR_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Pred Growth)" }
         ];
@@ -4151,9 +4191,11 @@ function displayPastRunDetails(runIndex) {
                 bnPredictionHistory.predatorExtinctionProb.push(0.5);
             }
             if (!growthPredsHist.error) {
+                bnPredictionHistory.favorableGrowthPlantProb.push(growthPredsHist.plant);
                 bnPredictionHistory.favorableGrowthPreyProb.push(growthPredsHist.prey);
                 bnPredictionHistory.favorableGrowthPredatorProb.push(growthPredsHist.predator);
             } else {
+                bnPredictionHistory.favorableGrowthPlantProb.push(0.5);
                 bnPredictionHistory.favorableGrowthPreyProb.push(0.5);
                 bnPredictionHistory.favorableGrowthPredatorProb.push(0.5);
             }
@@ -4498,11 +4540,10 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
     function importRunsData(event) {
       const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (e) => {
         try {
-          const importedObject = JSON.parse(e.target.result); let importedRuns, importedInitialConfigSnapshot; if (importedObject.version >= 1 && importedObject.completedRuns && importedObject.initialConfigSnapshot) { importedRuns = importedObject.completedRuns; importedInitialConfigSnapshot = importedObject.initialConfigSnapshot; } else if (Array.isArray(importedObject)) { importedRuns = importedObject; importedInitialConfigSnapshot = JSON.parse(JSON.stringify(config)); console.log("Imported legacy data. Using current app defaults for comparison."); } else throw new Error("Invalid data format."); if (!Array.isArray(importedRuns)) throw new Error("Completed runs data not an array."); if (importedRuns.length > 0 && (!importedRuns[0].parameters || !importedRuns[0].statistics)) throw new Error("Run data malformed."); completedRuns = importedRuns; initialConfigSnapshot = importedInitialConfigSnapshot; console.log(`Imported ${completedRuns.length} runs.`); alert(`Successfully imported ${completedRuns.length} runs.`); initBN();
+          const importedObject = JSON.parse(e.target.result); let importedRuns, importedInitialConfigSnapshot; if (importedObject.version >= 1 && importedObject.completedRuns && importedObject.initialConfigSnapshot) { importedRuns = importedObject.completedRuns; importedInitialConfigSnapshot = importedObject.initialConfigSnapshot; } else if (Array.isArray(importedObject)) { importedRuns = importedObject; importedInitialConfigSnapshot = JSON.parse(JSON.stringify(config)); console.log("Imported legacy data. Using current app defaults for comparison."); } else throw new Error("Invalid data format."); if (!Array.isArray(importedRuns)) throw new Error("Completed runs data not an array."); if (importedRuns.length > 0 && (!importedRuns[0].parameters || !importedRuns[0].statistics)) throw new Error("Run data malformed."); completedRuns = importedRuns; initialConfigSnapshot = importedInitialConfigSnapshot; console.log(`Imported ${completedRuns.length} runs.`); alert(`Successfully imported ${completedRuns.length} runs.`); adaptBNBinCountIfNeeded();
           gpOptimizer.observations = [];
           completedRuns.forEach(run => {
             if (run.durationFrames > 30) {
-              updateBNWithRunData(run);
               const scoreForGP = calculateAutoPilotScore(run);
               gpOptimizer.addObservation(run.parameters, scoreForGP);
             }
@@ -4515,6 +4556,7 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
     function drawBNPredictionGraph() {
       const yMax = 1.05; // Probabilities are 0-1, give a little padding
       const histories = [
+
         {
           data: bnPredictionHistory.plantExtinctionProb,
           color: getComputedCssVar(CSS_VARS.PLANT_COLOR),
@@ -4534,6 +4576,12 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
           color: getComputedCssVar(CSS_VARS.PREDATOR_COLOR),
           lineWidth: 1.5,
           label: "P(Pred Extinct)",
+          visible: true
+        },
+        { data: bnPredictionHistory.favorableGrowthPlantProb,
+          color: modifyHslColor(getComputedCssVar(CSS_VARS.PLANT_COLOR), 1, 1.2),
+          lineWidth: 1.5,
+          label: "P(Plant Growth)",
           visible: true
         },
         {
@@ -4794,7 +4842,7 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
       gpNormalizationParamInfo.push({ configKey: 'preyKillPredatorsMode', min: 0, max: 1 });
       gpOptimizer = new SimpleGaussianProcess(gpNormalizationParamInfo);
 
-      initBN(); // Initialize Bayesian Network structure
+      adaptBNBinCountIfNeeded(); // Initialize BN with appropriate bin count
 
       // Initialize run state
       currentRunNumber = 0; // Will be incremented to 1 by startNewRun
