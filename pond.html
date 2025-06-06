@@ -3563,10 +3563,22 @@ function updateCurrentBNPredictionsDisplay() {
       DOM_ELEMENTS.bnRunStartPredStarvationRiskPrediction.textContent = starv && !starv.error ? starv.predator.toFixed(3) : 'N/A';
     }
 
-    function updateBnAccuracyDisplay() {
+function updateBnAccuracyDisplay() {
       if (!DOM_ELEMENTS.bnAccuracyDisplay) return;
       const avgErr = getBnErrorAverage();
       DOM_ELEMENTS.bnAccuracyDisplay.textContent = isNaN(avgErr) ? 'N/A' : (1 - avgErr).toFixed(3);
+    }
+
+    function formatBNPredictionSummary(preds) {
+      if (!preds || preds.extinction?.error || preds.growth?.error || preds.starvationRisk?.error)
+        return 'Preds: N/A';
+      const ext = preds.extinction;
+      const grow = preds.growth;
+      const starv = preds.starvationRisk;
+      return `Preds: ExtP ${ext.prey.toFixed(2)}, ExtR ${ext.predator.toFixed(2)} | ` +
+             `GrowPl ${grow.plant.toFixed(2)}, GrowP ${grow.prey.toFixed(2)}, ` +
+             `GrowR ${grow.predator.toFixed(2)} | ` +
+             `StarvP ${starv.prey.toFixed(2)}, StarvR ${starv.predator.toFixed(2)}`;
     }
 
 function populatePastRunsSummaryList() {
@@ -3596,7 +3608,8 @@ function populatePastRunsSummaryList() {
         item.className = 'past-run-summary-item';
         const originalRunIndex = completedRuns.findIndex(r => r.runNumber === run.runNumber);
         item.dataset.runIndex = originalRunIndex;
-        item.innerHTML = ` <h4 class="font-semibold text-lg">Run ${run.runNumber} (AP Score: ${run.autoPilotScore.toFixed(0)})</h4> <p class="text-sm text-gray-300">Survival: ${run.survivalScore.toFixed(0)} frames</p> <p class="text-sm text-gray-400">Final Pop: P:${run.statistics.finalPlantCount}, Y:${run.statistics.finalPreyCount}, R:${run.statistics.finalPredatorCount}</p> <canvas class="past-run-summary-graph"></canvas>`;
+        const predSummary = formatBNPredictionSummary(run.statistics.bnPredictionsAtRunStart);
+        item.innerHTML = ` <h4 class="font-semibold text-lg">Run ${run.runNumber} (AP Score: ${run.autoPilotScore.toFixed(0)})</h4> <p class="text-sm text-gray-300">Survival: ${run.survivalScore.toFixed(0)} frames</p> <p class="text-sm text-gray-400">Final Pop: P:${run.statistics.finalPlantCount}, Y:${run.statistics.finalPreyCount}, R:${run.statistics.finalPredatorCount}</p> <p class="text-xs text-gray-400">${predSummary}</p> <canvas class="past-run-summary-graph"></canvas>`;
         summaryListDiv.appendChild(item);
         const summaryGraphCanvas = item.querySelector('.past-run-summary-graph');
         drawSinglePastRunSummaryGraph(summaryGraphCanvas, run);
