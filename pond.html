@@ -1005,10 +1005,12 @@
       }
       remove(entity) {
         if (!entity._qtNode) return;
-        const arr = entity._qtNode.points;
+        const node = entity._qtNode;
+        const arr = node.points;
         const idx = arr.indexOf(entity);
         if (idx !== -1) arr.splice(idx, 1);
         entity._qtNode = null;
+        this.tryCollapse();
       }
       update(entity) { this.remove(entity); this.insert(entity); }
       queryCircle(x, y, r, found = []) {
@@ -1034,6 +1036,15 @@
         if (this.divided) this.children.forEach(c => c.clear());
         this.children = [];
         this.divided = false;
+      }
+      tryCollapse() {
+        if (this.divided) {
+          this.children.forEach(c => c.tryCollapse());
+          if (this.children.every(c => !c.divided && c.points.length === 0)) {
+            this.children = [];
+            this.divided = false;
+          }
+        }
       }
       forEachNode(cb) {
         cb(this);
