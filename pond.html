@@ -1957,7 +1957,7 @@ function updateCurrentBNPredictionsDisplay() {
       if (!simBayesianNetwork) return; 
 
       // For text display: use UI params for non-population, live counts for population
-      const paramsForLiveTextDisplay = JSON.parse(JSON.stringify(config)); // Start with UI params
+      const paramsForLiveTextDisplay = structuredClone(config); // Start with UI params
       // Override initial population parameters with current live counts
       paramsForLiveTextDisplay.initialPlants = plants.length;
       paramsForLiveTextDisplay.initialPrey = prey.length;
@@ -2877,7 +2877,7 @@ function updateCurrentBNPredictionsDisplay() {
       // Buttons
       DOM_ELEMENTS.resetSimulation.addEventListener('click', () => {
         console.log(`User manually reset for run ${currentRunNumber + 1}.`);
-        const currentConfigSnapshot = JSON.parse(JSON.stringify(config));
+        const currentConfigSnapshot = structuredClone(config);
         let bnExtPreds = null, bnGrowthPreds = null, bnStarvPreds = null;
         if (isBNReady()) { // Get predictions for the *next* run's parameters
           bnExtPreds = predictExtinctionProbabilities(currentConfigSnapshot);
@@ -2896,7 +2896,7 @@ function updateCurrentBNPredictionsDisplay() {
           startNewRun(suggestedParams);
         } else {
           console.log("Auto-pilot could not suggest parameters. Resetting with current settings.");
-          const currentConfigSnapshot = JSON.parse(JSON.stringify(config));
+          const currentConfigSnapshot = structuredClone(config);
           let bnExtPreds = null, bnGrowthPreds = null, bnStarvPreds = null;
           if (isBNReady()) {
             bnExtPreds = predictExtinctionProbabilities(currentConfigSnapshot);
@@ -3258,18 +3258,18 @@ function updateCurrentBNPredictionsDisplay() {
         .filter(r => r.durationFrames > 30 && r.autoPilotScore > -9000);
 
       if (validRunsForBase.length < gpOptimizer.MIN_OBS_FOR_GP_ESTIMATE || Math.random() < explorationFactor * 0.20) {
-        baseConfigForPerturbation = JSON.parse(JSON.stringify(initialConfigSnapshot || config));
+        baseConfigForPerturbation = structuredClone(initialConfigSnapshot || config);
       } else {
         const minObservedScore = Math.min(0, ...validRunsForBase.map(r => r.autoPilotScore));
         const weightedRuns = validRunsForBase.map(r => ({ item: r, weight: Math.pow(r.autoPilotScore - minObservedScore + 1, 1.75) }));
         const selectedRun = weightedRandomSelect(weightedRuns);
-        baseConfigForPerturbation = selectedRun ? JSON.parse(JSON.stringify(selectedRun.parameters)) : JSON.parse(JSON.stringify(config));
+        baseConfigForPerturbation = selectedRun ? structuredClone(selectedRun.parameters) : structuredClone(config);
       }
 
       const candidates = [];
 
       for (let i = 0; i < Math.floor(AUTOPILOT_CANDIDATE_POOL_SIZE * dynProps.perturb); i++) {
-        let candidateParams = JSON.parse(JSON.stringify(baseConfigForPerturbation));
+        let candidateParams = structuredClone(baseConfigForPerturbation);
         const numParamsToChange = randomInt(1, Math.max(1, Math.floor(tunableParams.length * (0.15 + explorationFactor * 0.4))));
         const shuffledTunable = [...tunableParams].sort(() => 0.5 - Math.random());
         for (let j = 0; j < numParamsToChange; j++) {
@@ -3285,7 +3285,7 @@ function updateCurrentBNPredictionsDisplay() {
       }
 
       for (let i = 0; i < Math.floor(AUTOPILOT_CANDIDATE_POOL_SIZE * dynProps.perturbReset); i++) {
-        let candidateParams = JSON.parse(JSON.stringify(baseConfigForPerturbation));
+        let candidateParams = structuredClone(baseConfigForPerturbation);
         const numParamsToChange = randomInt(1, Math.max(1, Math.floor(tunableParams.length * (0.2 + explorationFactor * 0.3))));
         const numParamsToReset = randomInt(0, Math.max(1, Math.floor(numParamsToChange * (0.2 + explorationFactor * 0.3))));
         const shuffledTunable = [...tunableParams].sort(() => 0.5 - Math.random());
@@ -3487,7 +3487,7 @@ function updateCurrentBNPredictionsDisplay() {
     }
 
     function saveCurrentRunData() {
-      const currentFullConfig = JSON.parse(JSON.stringify(config));
+      const currentFullConfig = structuredClone(config);
       currentFullConfig.preyVisionRadiusSq = currentFullConfig.preyVisionRadius * currentFullConfig.preyVisionRadius;
       currentFullConfig.predatorVisionRadiusSq = currentFullConfig.predatorVisionRadius * currentFullConfig.predatorVisionRadius;
 
@@ -3500,12 +3500,12 @@ function updateCurrentBNPredictionsDisplay() {
           totalPreyDeathsByPredation, totalPreyDeathsByStarvation,
           totalPredatorDeathsByStarvation, totalPredatorDeathsByMobbing,
           finalPlantCount: plants.length, finalPreyCount: prey.length, finalPredatorCount: predators.length,
-          deathFrames: JSON.parse(JSON.stringify(currentRunDeathFrames)),
-          bnPredictionsAtRunStart: JSON.parse(JSON.stringify(bnPredictionsForNextRun)),
+          deathFrames: structuredClone(currentRunDeathFrames),
+          bnPredictionsAtRunStart: structuredClone(bnPredictionsForNextRun),
         },
-        populationGraphHistory: JSON.parse(JSON.stringify(populationHistory)),
-        cumulativeGraphHistory: JSON.parse(JSON.stringify(cumulativeHistory)),
-        bnPredictionGraphHistory: JSON.parse(JSON.stringify(bnPredictionHistory)),
+        populationGraphHistory: structuredClone(populationHistory),
+        cumulativeGraphHistory: structuredClone(cumulativeHistory),
+        bnPredictionGraphHistory: structuredClone(bnPredictionHistory),
       };
       completedRuns.push(runData);
 
@@ -4177,7 +4177,7 @@ function displayPastRunDetails(runIndex) {
         if (bnUpdateCounter >= bnUpdateInterval) {
             bnUpdateCounter = 0;
 
-            const paramsForLiveGraph = JSON.parse(JSON.stringify(config)); // Start with UI params
+            const paramsForLiveGraph = structuredClone(config); // Start with UI params
             paramsForLiveGraph.initialPlants = Math.max(0, plants.length); // Use live counts
             paramsForLiveGraph.initialPrey = Math.max(0, prey.length);
             paramsForLiveGraph.initialPredators = Math.max(0, predators.length);
@@ -4235,7 +4235,7 @@ function displayPastRunDetails(runIndex) {
           const nextParams = suggestNextParameters();
           if (nextParams) startNewRun(nextParams);
           else {
-            const currentConfigSnapshot = JSON.parse(JSON.stringify(config));
+            const currentConfigSnapshot = structuredClone(config);
             let bnExtPreds = null, bnGrowthPreds = null, bnStarvPreds = null;
             // For bnPredictionsForNextRun, we use the pure UI config, NOT live populations
             if (isBNReady()) {
@@ -4552,7 +4552,7 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
     function importRunsData(event) {
       const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (e) => {
         try {
-          const importedObject = JSON.parse(e.target.result); let importedRuns, importedInitialConfigSnapshot; if (importedObject.version >= 1 && importedObject.completedRuns && importedObject.initialConfigSnapshot) { importedRuns = importedObject.completedRuns; importedInitialConfigSnapshot = importedObject.initialConfigSnapshot; } else if (Array.isArray(importedObject)) { importedRuns = importedObject; importedInitialConfigSnapshot = JSON.parse(JSON.stringify(config)); console.log("Imported legacy data. Using current app defaults for comparison."); } else throw new Error("Invalid data format."); if (!Array.isArray(importedRuns)) throw new Error("Completed runs data not an array."); if (importedRuns.length > 0 && (!importedRuns[0].parameters || !importedRuns[0].statistics)) throw new Error("Run data malformed."); completedRuns = importedRuns; initialConfigSnapshot = importedInitialConfigSnapshot; console.log(`Imported ${completedRuns.length} runs.`); alert(`Successfully imported ${completedRuns.length} runs.`); adaptBNBinCountIfNeeded();
+          const importedObject = JSON.parse(e.target.result); let importedRuns, importedInitialConfigSnapshot; if (importedObject.version >= 1 && importedObject.completedRuns && importedObject.initialConfigSnapshot) { importedRuns = importedObject.completedRuns; importedInitialConfigSnapshot = importedObject.initialConfigSnapshot; } else if (Array.isArray(importedObject)) { importedRuns = importedObject; importedInitialConfigSnapshot = structuredClone(config); console.log("Imported legacy data. Using current app defaults for comparison."); } else throw new Error("Invalid data format."); if (!Array.isArray(importedRuns)) throw new Error("Completed runs data not an array."); if (importedRuns.length > 0 && (!importedRuns[0].parameters || !importedRuns[0].statistics)) throw new Error("Run data malformed."); completedRuns = importedRuns; initialConfigSnapshot = importedInitialConfigSnapshot; console.log(`Imported ${completedRuns.length} runs.`); alert(`Successfully imported ${completedRuns.length} runs.`); adaptBNBinCountIfNeeded();
           gpOptimizer.observations = [];
           completedRuns.forEach(run => {
             if (run.durationFrames > 30) {
@@ -4852,7 +4852,7 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
       document.body.style.overflow = 'hidden'; // Default to hidden for sim view
 
       getUrlParams(); // Apply URL params like ?hue=...
-      initialConfigSnapshot = JSON.parse(JSON.stringify(config)); // Snapshot initial state for comparison
+      initialConfigSnapshot = structuredClone(config); // Snapshot initial state for comparison
 
       setupControls(); // Initialize UI controls and their listeners
 
@@ -4876,7 +4876,7 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
 
       // Make initial BN predictions for the very first run's parameters
       let bnExtPreds = null, bnGrowthPreds = null, bnStarvPreds = null;
-      const currentEffectiveConfig = JSON.parse(JSON.stringify(config)); // Use current state of config
+      const currentEffectiveConfig = structuredClone(config); // Use current state of config
       if (isBNReady()) { // BN won't be "ready" initially, but this structure is for consistency
         bnExtPreds = predictExtinctionProbabilities(currentEffectiveConfig);
         bnGrowthPreds = predictFavorableGrowth(currentEffectiveConfig);
