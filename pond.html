@@ -2102,43 +2102,53 @@ function updateCurrentBNPredictionsDisplay() {
     function clamp(val, min, max) { return Math.min(Math.max(val, min), max); }
     function weightedRandomSelect(options) { if (!options || options.length === 0) return null; const totalWeight = options.reduce((sum, option) => sum + Math.max(0, option.weight), 0); if (totalWeight <= 0) { return options.length > 0 ? options[randomInt(0, options.length - 1)].item : null; } let randomVal = Math.random() * totalWeight; for (const option of options) { const currentWeight = Math.max(0, option.weight); if (randomVal < currentWeight) return option.item; randomVal -= currentWeight; } return options.length > 0 ? options[options.length - 1].item : null; }
 
-    function modifyHslColor(hslString, satMultiplier, lumMultiplier, alpha = null) {
-      if (!hslString || typeof hslString !== 'string') return 'hsl(0,0%,0%)'; // Default fallback
+    function parseHslString(hslString) {
+      if (!hslString || typeof hslString !== 'string') return null;
+      const match = hslString.match(/hsla?\(\s*([\d.]+),\s*([\d.]+)%,\s*([\d.]+)%(?:,\s*([\d.]+))?\)/i);
+      if (!match) return null;
+      const [, h, s, l, a] = match;
+      const obj = { h: parseFloat(h), s: parseFloat(s), l: parseFloat(l) };
+      if (a !== undefined) obj.a = parseFloat(a);
+      return obj;
+    }
 
-      let match = hslString.match(/hsla?\(([\d.]+),\s*([\d.]+)%,\s*([\d.]+)%(?:,\s*([\d.]+))?\)/i);
-      if (!match) {
-        // console.warn("Could not parse HSL string:", hslString); // Keep commented unless debugging
-        return hslString; // Return original if parsing fails
-      }
-
-      let [, h_str, s_str, l_str, a_str] = match;
-      let h = parseFloat(h_str);
-      let s = parseFloat(s_str);
-      let l = parseFloat(l_str);
-      let currentAlpha = a_str !== undefined ? parseFloat(a_str) : 1.0;
-
-      s = Math.max(0, Math.min(100, s * satMultiplier));
-      l = Math.max(0, Math.min(100, l * lumMultiplier));
-
-      const finalAlpha = alpha !== null ? alpha : currentAlpha;
-
-      if (finalAlpha < 1.0 && finalAlpha >= 0) { // Ensure alpha is valid
-        return `hsla(${h}, ${s}%, ${l}%, ${finalAlpha.toFixed(3)})`;
-      }
+    function hslObjToString(obj) {
+      if (!obj) return 'hsl(0,0%,0%)';
+      const { h, s, l, a } = obj;
+      if (a !== undefined && a < 1) return `hsla(${h}, ${s}%, ${l}%, ${a.toFixed ? a.toFixed(3) : a})`;
       return `hsl(${h}, ${s}%, ${l}%)`;
+    }
+
+    function modifyHslObject(hslObj, satMultiplier, lumMultiplier, alpha = null) {
+      if (!hslObj) return null;
+      const result = {
+        h: hslObj.h,
+        s: clamp(hslObj.s * satMultiplier, 0, 100),
+        l: clamp(hslObj.l * lumMultiplier, 0, 100)
+      };
+      if (alpha !== null) result.a = alpha;
+      else if (hslObj.a !== undefined) result.a = hslObj.a;
+      return result;
+    }
+
+    function modifyHslColor(hslInput, satMultiplier, lumMultiplier, alpha = null) {
+      const baseObj = typeof hslInput === 'string' ? parseHslString(hslInput) : hslInput;
+      if (!baseObj) return typeof hslInput === 'string' ? hslInput : 'hsl(0,0%,0%)';
+      const modObj = modifyHslObject(baseObj, satMultiplier, lumMultiplier, alpha);
+      return hslObjToString(modObj);
     }
 
     function easeOutQuad(t) {
       return t * (2 - t);
     }
 
-    function drawRipple(x, y, progress, baseColor) {
+    function drawRipple(x, y, progress, baseColorObj) {
       const rippleRadius = 8 + progress * 20;
       ctx.save();
       ctx.globalAlpha = (1 - progress) * 0.5;
       ctx.beginPath();
       ctx.arc(x, y, rippleRadius, 0, Math.PI * 2);
-      ctx.strokeStyle = modifyHslColor(baseColor, 1.0, 1.2, ctx.globalAlpha);
+      ctx.strokeStyle = modifyHslColor(baseColorObj, 1.0, 1.2, ctx.globalAlpha);
       ctx.lineWidth = 2;
       ctx.stroke();
       ctx.restore();
@@ -2265,8 +2275,8 @@ function updateCurrentBNPredictionsDisplay() {
       constructor(x, y) {
         super(x, y, 3);
         this.health = config.plantHealth;
-        this.baseColor = getComputedCssVar(CSS_VARS.PLANT_COLOR);
-        this.color = this.baseColor; // May be modified by animations
+        this.baseColor = parseHslString(getComputedCssVar(CSS_VARS.PLANT_COLOR));
+        this.color = this.baseColor; // Stored as HSL object
         this.isPlankton = config.planktonMode;
         if (this.isPlankton) this.vel = Vector.random2D().mult(config.planktonDriftSpeed);
         else this.vel = new Vector(0, 0);
@@ -2329,7 +2339,7 @@ function updateCurrentBNPredictionsDisplay() {
         ctx.save();
         let scaleFactor = 1.0;
         let alphaFactor = 1.0;
-        let finalColor = this.baseColor;
+        let finalColor = hslObjToString(this.baseColor);
 
         if (this.animationState === 'birthing') {
           const birthProgress = this.animationProgress;
@@ -2346,7 +2356,7 @@ function updateCurrentBNPredictionsDisplay() {
           } else {
             const eased = easeOutQuad((birthProgress - rampUpDuration) / (1 - rampUpDuration));
             scaleFactor = peakScale - (peakScale - finalScale) * eased;
-            finalColor = this.baseColor;
+            finalColor = hslObjToString(this.baseColor);
           }
           alphaFactor = 0.2 + 0.8 * Math.min(1, birthProgress * 2.0);
           drawRipple(this.pos.x, this.pos.y, birthProgress, this.baseColor);
@@ -2382,7 +2392,7 @@ function updateCurrentBNPredictionsDisplay() {
         this.inertiaEffectStrength = config.preyInertiaEffectStrength;
         this.turnSpeedPenaltyFactor = config.preyTurnSpeedPenaltyFactor;
         this.sharpTurnThresholdAngle = config.preySharpTurnThresholdAngle;
-        this.baseColor = getComputedCssVar(CSS_VARS.PREY_COLOR);
+        this.baseColor = parseHslString(getComputedCssVar(CSS_VARS.PREY_COLOR));
         this.color = this.baseColor;
         this.isFleeing = false;
         this.reproductionCooldown = 0;
@@ -2439,7 +2449,7 @@ function updateCurrentBNPredictionsDisplay() {
               this.target = nearbyPredator;
               this.isAttackingPredatorTarget = nearbyPredator;
               steeringForce = this.seek(nearbyPredator.pos);
-              this.color = `hsl(calc(${getComputedCssVar(CSS_VARS.BASE_HUE)} + 30), 90%, 70%)`;
+              this.color = parseHslString(`hsl(calc(${getComputedCssVar(CSS_VARS.BASE_HUE)} + 30), 90%, 70%)`);
             } else {
               steeringForce = this.flee(nearbyPredator.pos);
               this.isFleeing = true; this.target = null;
@@ -2551,7 +2561,7 @@ function updateCurrentBNPredictionsDisplay() {
           ctx.scale(1.2, 1);
           ctx.beginPath();
           ctx.arc(0, 0, currentRadius, 0, Math.PI * 2);
-          ctx.strokeStyle = dynamicStrokeColor;
+          ctx.strokeStyle = typeof dynamicStrokeColor === 'string' ? dynamicStrokeColor : hslObjToString(dynamicStrokeColor);
           ctx.lineWidth = 2;
           ctx.stroke();
           ctx.restore();
@@ -2619,8 +2629,8 @@ function updateCurrentBNPredictionsDisplay() {
         this.inertiaEffectStrength = config.predatorInertiaEffectStrength;
         this.turnSpeedPenaltyFactor = config.predatorTurnSpeedPenaltyFactor;
         this.sharpTurnThresholdAngle = config.predatorSharpTurnThresholdAngle;
-        this.baseColor = getComputedCssVar(CSS_VARS.PREDATOR_COLOR);
-        this.mobbedColor = getComputedCssVar(CSS_VARS.PREDATOR_MOBBED_COLOR);
+        this.baseColor = parseHslString(getComputedCssVar(CSS_VARS.PREDATOR_COLOR));
+        this.mobbedColor = parseHslString(getComputedCssVar(CSS_VARS.PREDATOR_MOBBED_COLOR));
         this.color = this.baseColor;
         this.reproductionCooldown = 0;
         this.attackedByPreyTimer = 0;
@@ -2797,7 +2807,7 @@ function updateCurrentBNPredictionsDisplay() {
           ctx.scale(1.2, 1);
           ctx.beginPath();
           ctx.arc(0, 0, currentRadius, 0, Math.PI * 2);
-          ctx.strokeStyle = dynamicStrokeColor;
+          ctx.strokeStyle = typeof dynamicStrokeColor === 'string' ? dynamicStrokeColor : hslObjToString(dynamicStrokeColor);
           ctx.lineWidth = 3;
           ctx.stroke();
           ctx.restore();
