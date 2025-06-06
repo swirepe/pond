@@ -1004,6 +1004,10 @@
     const BN_LAPLACE_SMOOTHING = 1; // Laplace smoothing value for CPTs
     const BN_AUTOPILOT_PREDICTION_THRESHOLD = 0.80; // For BN scoring, how confident for "favorable growth"
 
+    const BN_MAX_BIN_COUNT = 6; // Upper limit for adaptive binning
+    const BN_BIN_EXPAND_RUN_THRESHOLD = 30; // Runs needed to add another bin
+    let bnCurrentBinCount = BN_DEFAULT_BIN_COUNT; // Tracks the active bin count
+
     const AUTOPILOT_CANDIDATE_POOL_SIZE = 1000;
     const AUTOPILOT_PROPORTION_PERTURB = 0.5;
     const AUTOPILOT_PROPORTION_RANDOM = 0.2;
@@ -1568,6 +1572,38 @@
         calculate: (p, globalConf) => (p.predatorMaxHealth - globalConf.predatorReproductionCost) / Math.max(1, p.predatorReproductionCooldown * p.predatorHungerRate)
       },
     ];
+    function applyBinCountToConfigs(count) {
+      bnParamNodesConfigBase.forEach(c => c.binCount = count);
+      bnDerivedParamNodesConfig.forEach(c => c.binCount = count);
+    }
+
+    function adaptBNBinCountIfNeeded() {
+      const desired = Math.min(BN_MAX_BIN_COUNT,
+        BN_DEFAULT_BIN_COUNT + Math.floor(completedRuns.length / BN_BIN_EXPAND_RUN_THRESHOLD));
+      const needRebuild = !simBayesianNetwork || desired !== bnCurrentBinCount;
+      if (!needRebuild) return;
+
+      bnCurrentBinCount = desired;
+      applyBinCountToConfigs(bnCurrentBinCount);
+
+      bnPreyExtinctionCPTCounters = {};
+      bnPredatorExtinctionCPTCounters = {};
+      bnFavorableGrowthPlantCPTCounters = {};
+      bnFavorableGrowthPreyCPTCounters = {};
+      bnFavorableGrowthPredatorCPTCounters = {};
+      bnPreyStarvationRiskCPTCounters = {};
+      bnPredatorStarvationRiskCPTCounters = {};
+
+      initBN();
+
+      completedRuns.forEach(run => {
+        if (run.durationFrames > 30) {
+          updateBNWithRunData(run);
+        }
+      });
+    }
+
+    applyBinCountToConfigs(bnCurrentBinCount);
     let allBnParamAndDerivedNodeConfigs = []; // Will be populated in initBN
 
     function getBNMinRunsForPrediction() {
@@ -3483,6 +3519,8 @@ function updateCurrentBNPredictionsDisplay() {
       if (simBayesianNetwork && currentRunFrameCounter > 30) {
         updateBNWithRunData(runData);
       }
+
+      adaptBNBinCountIfNeeded();
     }
 
     function drawSinglePastRunSummaryGraph(canvasEl, runData) {
@@ -4493,11 +4531,10 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
     function importRunsData(event) {
       const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (e) => {
         try {
-          const importedObject = JSON.parse(e.target.result); let importedRuns, importedInitialConfigSnapshot; if (importedObject.version >= 1 && importedObject.completedRuns && importedObject.initialConfigSnapshot) { importedRuns = importedObject.completedRuns; importedInitialConfigSnapshot = importedObject.initialConfigSnapshot; } else if (Array.isArray(importedObject)) { importedRuns = importedObject; importedInitialConfigSnapshot = JSON.parse(JSON.stringify(config)); console.log("Imported legacy data. Using current app defaults for comparison."); } else throw new Error("Invalid data format."); if (!Array.isArray(importedRuns)) throw new Error("Completed runs data not an array."); if (importedRuns.length > 0 && (!importedRuns[0].parameters || !importedRuns[0].statistics)) throw new Error("Run data malformed."); completedRuns = importedRuns; initialConfigSnapshot = importedInitialConfigSnapshot; console.log(`Imported ${completedRuns.length} runs.`); alert(`Successfully imported ${completedRuns.length} runs.`); initBN();
+          const importedObject = JSON.parse(e.target.result); let importedRuns, importedInitialConfigSnapshot; if (importedObject.version >= 1 && importedObject.completedRuns && importedObject.initialConfigSnapshot) { importedRuns = importedObject.completedRuns; importedInitialConfigSnapshot = importedObject.initialConfigSnapshot; } else if (Array.isArray(importedObject)) { importedRuns = importedObject; importedInitialConfigSnapshot = JSON.parse(JSON.stringify(config)); console.log("Imported legacy data. Using current app defaults for comparison."); } else throw new Error("Invalid data format."); if (!Array.isArray(importedRuns)) throw new Error("Completed runs data not an array."); if (importedRuns.length > 0 && (!importedRuns[0].parameters || !importedRuns[0].statistics)) throw new Error("Run data malformed."); completedRuns = importedRuns; initialConfigSnapshot = importedInitialConfigSnapshot; console.log(`Imported ${completedRuns.length} runs.`); alert(`Successfully imported ${completedRuns.length} runs.`); adaptBNBinCountIfNeeded();
           gpOptimizer.observations = [];
           completedRuns.forEach(run => {
             if (run.durationFrames > 30) {
-              updateBNWithRunData(run);
               const scoreForGP = calculateAutoPilotScore(run);
               gpOptimizer.addObservation(run.parameters, scoreForGP);
             }
@@ -4754,7 +4791,7 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
       gpNormalizationParamInfo.push({ configKey: 'preyKillPredatorsMode', min: 0, max: 1 });
       gpOptimizer = new SimpleGaussianProcess(gpNormalizationParamInfo);
 
-      initBN(); // Initialize Bayesian Network structure
+      adaptBNBinCountIfNeeded(); // Initialize BN with appropriate bin count
 
       // Initialize run state
       currentRunNumber = 0; // Will be incremented to 1 by startNewRun
