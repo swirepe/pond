@@ -766,6 +766,7 @@
     style="position: absolute; top: 60px; left: 20px; color: var(--text-color); font-size: 0.9em; background-color: var(--ui-bg-color); padding: 5px 10px; border-radius: 5px; border: 1px solid var(--ui-border-color); opacity:0;">
     Current Run: <span id="currentRunDisplay">1</span>
     &nbsp;| Exploration: <span id="explorationFactorDisplay">0.00</span>
+    &nbsp;| Pred. Score: <span id="rfPredictedScoreDisplay">-</span>
   </div>
   </div>
 
@@ -785,7 +786,7 @@
 
     <div id="pastRunDetails" style="display:none;">
       <h3 class="text-xl font-semibold mb-4 text-center">Run <span id="pastRunNumberDisplay"></span> Details
-        (Score: <span id="pastRunScoreDisplay">-</span>, AP Score: <span id="pastRunAutoPilotScoreDisplay">-</span>)
+        (Score: <span id="pastRunScoreDisplay">-</span>, AP Score: <span id="pastRunAutoPilotScoreDisplay">-</span>, Pred: <span id="pastRunRfPredictedScoreDisplay">-</span>)
       </h3>
       <div class="grid md:grid-cols-2 gap-6">
         <div class="stat-subsection bg-[hsl(var(--base-hue),15%,10%)] p-4 rounded-lg max-h-[400px] overflow-y-auto">
@@ -905,6 +906,7 @@
     let initialConfigSnapshot;
 
     let bnPredictionsForNextRun = { extinction: null, growth: null, starvationRisk: null };
+    let rfPredictionForNextRun = null;
 
     let simulationIsActive = true;
     let gameLoopRunning = false;
@@ -1485,6 +1487,113 @@
       }
     }
     let gpOptimizer = null;
+
+    // --- Simple Random Forest Regressor (Prototype) ---
+    class SimpleRandomForest {
+      constructor(tunableParamsList, numTrees = 8, maxDepth = 4) {
+        this.tunableParamsList = tunableParamsList;
+        this.numTrees = numTrees;
+        this.maxDepth = maxDepth;
+        this.data = [];
+        this.trees = [];
+      }
+
+      _normalizeParams(params) {
+        const normalized = {};
+        this.tunableParamsList.forEach(pConf => {
+          const val = params[pConf.configKey];
+          if (typeof val === 'boolean') { normalized[pConf.configKey] = val ? 1.0 : 0.0; return; }
+          if (val === undefined) { normalized[pConf.configKey] = 0.5; return; }
+          const range = pConf.max - pConf.min;
+          normalized[pConf.configKey] = range > 0 ? Math.max(0, Math.min(1, (val - pConf.min) / range)) : 0.5;
+        });
+        return normalized;
+      }
+
+      addObservation(params, score) {
+        this.data.push({ params: this._normalizeParams(params), score });
+      }
+
+      _variance(arr) {
+        if (arr.length === 0) return 0;
+        const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
+        return arr.reduce((s, v) => s + (v - mean) * (v - mean), 0) / arr.length;
+      }
+
+      _bestSplit(data, features) {
+        let bestFeature = null, bestThresh = null, bestScore = Infinity;
+        for (const f of features) {
+          const vals = data.map(d => d.params[f]).sort((a, b) => a - b);
+          for (let i = 1; i < vals.length; i++) {
+            const t = (vals[i - 1] + vals[i]) / 2;
+            const left = data.filter(d => d.params[f] <= t);
+            const right = data.filter(d => d.params[f] > t);
+            if (left.length === 0 || right.length === 0) continue;
+            const mse = this._variance(left.map(d => d.score)) * left.length +
+              this._variance(right.map(d => d.score)) * right.length;
+            if (mse < bestScore) { bestScore = mse; bestFeature = f; bestThresh = t; }
+          }
+        }
+        return { feature: bestFeature, threshold: bestThresh };
+      }
+
+      _buildTree(data, features, depth = 0) {
+        if (depth >= this.maxDepth || data.length <= 3) {
+          const mean = data.reduce((s, d) => s + d.score, 0) / data.length;
+          return { type: 'leaf', value: mean };
+        }
+        const split = this._bestSplit(data, features);
+        if (!split.feature) {
+          const mean = data.reduce((s, d) => s + d.score, 0) / data.length;
+          return { type: 'leaf', value: mean };
+        }
+        const left = data.filter(d => d.params[split.feature] <= split.threshold);
+        const right = data.filter(d => d.params[split.feature] > split.threshold);
+        if (left.length === 0 || right.length === 0) {
+          const mean = data.reduce((s, d) => s + d.score, 0) / data.length;
+          return { type: 'leaf', value: mean };
+        }
+        return {
+          type: 'node',
+          feature: split.feature,
+          threshold: split.threshold,
+          left: this._buildTree(left, features, depth + 1),
+          right: this._buildTree(right, features, depth + 1)
+        };
+      }
+
+      _predictTree(tree, params) {
+        if (tree.type === 'leaf') return tree.value;
+        if (params[tree.feature] <= tree.threshold) return this._predictTree(tree.left, params);
+        return this._predictTree(tree.right, params);
+      }
+
+      train() {
+        if (this.data.length < 2) return;
+        this.trees = [];
+        const features = this.tunableParamsList.map(p => p.configKey);
+        for (let i = 0; i < this.numTrees; i++) {
+          const sample = [];
+          for (let j = 0; j < this.data.length; j++) {
+            if (Math.random() < 0.8) sample.push(this.data[Math.floor(Math.random() * this.data.length)]);
+          }
+          const fSubset = features.filter(() => Math.random() < 0.7);
+          if (fSubset.length === 0) fSubset.push(features[Math.floor(Math.random() * features.length)]);
+          this.trees.push(this._buildTree(sample, fSubset, 0));
+        }
+      }
+
+      predict(params) {
+        if (this.trees.length === 0) return 0;
+        const norm = this._normalizeParams(params);
+        let sum = 0;
+        this.trees.forEach(t => { sum += this._predictTree(t, norm); });
+        return sum / this.trees.length;
+      }
+
+      isReady() { return this.trees.length > 0; }
+    }
+    let rfRegressor = null;
 
     // --- BN Helper Functions ---
     function discretizeContinuousValue(value, min, max, numBins) { if (value <= min) return 0; if (value >= max) return numBins - 1; const binWidth = (max - min) / numBins; if (binWidth === 0) return 0; const binIndex = Math.floor((value - min) / binWidth); return Math.min(binIndex, numBins - 1); }
@@ -2828,7 +2937,9 @@ function updateCurrentBNPredictionsDisplay() {
           bnStarvPreds = predictStarvationRiskProbabilities(currentConfigSnapshot);
         }
         bnPredictionsForNextRun = { extinction: bnExtPreds, growth: bnGrowthPreds, starvationRisk: bnStarvPreds };
+        rfPredictionForNextRun = rfRegressor && rfRegressor.isReady() ? rfRegressor.predict(currentConfigSnapshot) : null;
         updateCurrentBNPredictionsDisplay(); // Update display for current UI settings
+        updateRunStartRFPredictionDisplay();
         startNewRun(currentConfigSnapshot);
       });
 
@@ -2847,6 +2958,8 @@ function updateCurrentBNPredictionsDisplay() {
             bnStarvPreds = predictStarvationRiskProbabilities(currentConfigSnapshot);
           }
           bnPredictionsForNextRun = { extinction: bnExtPreds, growth: bnGrowthPreds, starvationRisk: bnStarvPreds };
+          rfPredictionForNextRun = rfRegressor && rfRegressor.isReady() ? rfRegressor.predict(currentConfigSnapshot) : null;
+          updateRunStartRFPredictionDisplay();
           startNewRun(currentConfigSnapshot);
         }
       });
@@ -3008,6 +3121,7 @@ function updateCurrentBNPredictionsDisplay() {
 
       resetSimulation(); // Resets entities, populations, and history arrays
       updateRunStartBNPredictionsDisplay(); // Show BN predictions for this run
+      updateRunStartRFPredictionDisplay();
       updateCurrentBNPredictionsDisplay(); // Update BN display for the *new* current parameters
       updateBnAccuracyDisplay();
 
@@ -3330,6 +3444,7 @@ function updateCurrentBNPredictionsDisplay() {
         let gpMean = 0;
         let gpVariance = (gpOptimizer && gpOptimizer.GP_MAX_VARIANCE !== undefined) ? gpOptimizer.GP_MAX_VARIANCE : 1.0;
         let rawBnScore = 0;
+        let rfPred = 0;
 
         if (isBNReady()) {
           const bnExtPreds = predictExtinctionProbabilities(c.params);
@@ -3360,6 +3475,9 @@ function updateCurrentBNPredictionsDisplay() {
         }
         c.debug_bn_component = rawBnScore;
 
+        if (rfRegressor && rfRegressor.isReady()) {
+          rfPred = rfRegressor.predict(c.params);
+        }
         if (gpOptimizer && gpOptimizer.observations.length >= gpOptimizer.MIN_OBS_FOR_GP_ESTIMATE) {
           const gpPrediction = gpOptimizer.predict(c.params);
           gpMean = gpPrediction.mean;
@@ -3369,7 +3487,8 @@ function updateCurrentBNPredictionsDisplay() {
 
           c.score = gpMean * GP_MEAN_WEIGHT +
             KAPPA_UCB * Math.sqrt(gpVariance) * ucbScoreMagnitudeHeuristic * UCB_BONUS_WEIGHT +
-            rawBnScore * BN_SCORE_WEIGHT;
+            rawBnScore * BN_SCORE_WEIGHT +
+            rfPred * 0.30;
         } else {
           const BN_SCORE_WEIGHT_NO_GP = 0.85;
           const RANDOM_EXPLORATION_WEIGHT_NO_GP = 0.15;
@@ -3377,10 +3496,12 @@ function updateCurrentBNPredictionsDisplay() {
             ? Math.abs(autoPilotStats.bestScoreEver * 0.1)
             : 500;
           c.score = rawBnScore * BN_SCORE_WEIGHT_NO_GP +
+            rfPred * 0.30 +
             (Math.random() - 0.5) * randomExplorationMagnitude * RANDOM_EXPLORATION_WEIGHT_NO_GP;
         }
         c.debug_gp_mean = gpMean;
         c.debug_gp_variance = gpVariance;
+        c.debug_rf_pred = rfPred;
       });
 
       candidates.sort((a, b) => b.score - a.score);
@@ -3392,11 +3513,13 @@ function updateCurrentBNPredictionsDisplay() {
         growth: isBNReady() ? predictFavorableGrowth(bestCandidate.params) : { plant: 0.5, prey: 0.5, predator: 0.5, error: "BN not ready" },
         starvationRisk: isBNReady() ? predictStarvationRiskProbabilities(bestCandidate.params) : { prey: 0.5, predator: 0.5, error: "BN not ready" },
       };
+      rfPredictionForNextRun = rfRegressor && rfRegressor.isReady() ? rfRegressor.predict(bestCandidate.params) : null;
+      updateRunStartRFPredictionDisplay();
 
 
       console.log(`Autopilot selected (Source: ${bestCandidate.source}). Top Score: ${bestCandidate.score.toFixed(0)}. BN Weight: ${BN_SCORE_WEIGHT.toFixed(2)} GPW:${GP_MEAN_WEIGHT.toFixed(2)} UCBW:${UCB_BONUS_WEIGHT.toFixed(2)}. Stagnation: ${autoPilotStats.stagnationCounter}, ModelUncert: ${autoPilotStats.modelUncertainty.toFixed(2)}, Exploration: ${explorationFactor.toFixed(2)}, Kappa: ${KAPPA_UCB.toFixed(2)}`);
 
-      console.log(`  GP Pred: Mean=${bestCandidate.debug_gp_mean.toFixed(0)}, Var=${bestCandidate.debug_gp_variance.toFixed(3)}. BN Comp: ${bestCandidate.debug_bn_component.toFixed(0)}`);
+      console.log(`  GP Pred: Mean=${bestCandidate.debug_gp_mean.toFixed(0)}, Var=${bestCandidate.debug_gp_variance.toFixed(3)}. RF Pred:${bestCandidate.debug_rf_pred.toFixed(0)} BN Comp: ${bestCandidate.debug_bn_component.toFixed(0)}`);
       if (bnPredictionsForNextRun.extinction && bnPredictionsForNextRun.growth && bnPredictionsForNextRun.starvationRisk) {
         console.log(`  BN Preds for chosen: ExtP:${bnPredictionsForNextRun.extinction.prey?.toFixed(3)} ExtR:${bnPredictionsForNextRun.extinction.predator?.toFixed(3)} | GrowPl:${bnPredictionsForNextRun.growth.plant?.toFixed(3)} GrowP:${bnPredictionsForNextRun.growth.prey?.toFixed(3)} GrowR:${bnPredictionsForNextRun.growth.predator?.toFixed(3)} | StarvP:${bnPredictionsForNextRun.starvationRisk.prey?.toFixed(3)} StarvR:${bnPredictionsForNextRun.starvationRisk.predator?.toFixed(3)}`);
       }
@@ -3441,6 +3564,7 @@ function updateCurrentBNPredictionsDisplay() {
           finalPlantCount: plants.length, finalPreyCount: prey.length, finalPredatorCount: predators.length,
           deathFrames: JSON.parse(JSON.stringify(currentRunDeathFrames)),
           bnPredictionsAtRunStart: JSON.parse(JSON.stringify(bnPredictionsForNextRun)),
+          rfPredictionAtRunStart: rfPredictionForNextRun,
         },
         populationGraphHistory: JSON.parse(JSON.stringify(populationHistory)),
         cumulativeGraphHistory: JSON.parse(JSON.stringify(cumulativeHistory)),
@@ -3459,6 +3583,7 @@ function updateCurrentBNPredictionsDisplay() {
       if (gpOptimizer && runData.durationFrames > 30) {
         const scoreForGP = calculateAutoPilotScore(runData);
         gpOptimizer.addObservation(runData.parameters, scoreForGP);
+        if (rfRegressor) { rfRegressor.addObservation(runData.parameters, scoreForGP); rfRegressor.train(); }
       }
       if (simBayesianNetwork && currentRunFrameCounter > 30) {
         updateBNWithRunData(runData);
@@ -3498,6 +3623,12 @@ function updateCurrentBNPredictionsDisplay() {
       DOM_ELEMENTS.bnRunStartPredatorGrowthPrediction.textContent = grow && !grow.error ? grow.predator.toFixed(3) : 'N/A';
       DOM_ELEMENTS.bnRunStartPreyStarvationRiskPrediction.textContent = starv && !starv.error ? starv.prey.toFixed(3) : 'N/A';
       DOM_ELEMENTS.bnRunStartPredStarvationRiskPrediction.textContent = starv && !starv.error ? starv.predator.toFixed(3) : 'N/A';
+    }
+
+    function updateRunStartRFPredictionDisplay() {
+      if (DOM_ELEMENTS.rfPredictedScoreDisplay) {
+        DOM_ELEMENTS.rfPredictedScoreDisplay.textContent = rfPredictionForNextRun !== null ? rfPredictionForNextRun.toFixed(0) : 'N/A';
+      }
     }
 
     function updateBnAccuracyDisplay() {
@@ -3584,6 +3715,8 @@ function displayPastRunDetails(runIndex) {
     DOM_ELEMENTS.pastRunNumberDisplay.textContent = runData.runNumber;
     DOM_ELEMENTS.pastRunScoreDisplay.textContent = calculateRunScore(runData).toFixed(0);
     DOM_ELEMENTS.pastRunAutoPilotScoreDisplay.textContent = calculateAutoPilotScore(runData).toFixed(0);
+    if (DOM_ELEMENTS.pastRunRfPredictedScoreDisplay)
+        DOM_ELEMENTS.pastRunRfPredictedScoreDisplay.textContent = runData.statistics.rfPredictionAtRunStart !== undefined ? runData.statistics.rfPredictionAtRunStart.toFixed(0) : 'N/A';
     let paramsHtml = '<ul>';
     const sortedParamKeys = Object.keys(runData.parameters).sort();
     for (const key of sortedParamKeys) {
@@ -4673,9 +4806,10 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
         'bnCurrentPreyStarvationRiskPrediction', 'bnCurrentPredStarvationRiskPrediction', // New DOM elements
         'planktonMode', 'preyKillPredatorsMode', 'showTargetLines', 'simulationSpeed', 'simulationSpeedValue',
         'exportRunsButton', 'importRunsFile', 'resetSimulation', 'autoPilotRun',
-        'pastRunsToggleMain', 'currentRunInfo', 'currentRunDisplay', 'explorationFactorDisplay',
+        'pastRunsToggleMain', 'currentRunInfo', 'currentRunDisplay', 'explorationFactorDisplay', 'rfPredictedScoreDisplay',
         'backToSimulationButton', 'noPastRunsMessage', 'pastRunsSummaryList', 'pastRunDetails',
         'pastRunNumberDisplay', 'pastRunScoreDisplay', 'pastRunAutoPilotScoreDisplay',
+        'pastRunRfPredictedScoreDisplay',
         'pastRunParamsDisplay', 'pastRunStatsDisplay',
           'pastPopulationGraphLegend', 'pastCumulativeGraphLegend', 'bnLegend', 'exportBNPngButton', 'exportBNSvgButton',
         'currentPopulationGraphLegend', 'currentCumulativeGraphLegend',
@@ -4733,6 +4867,7 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
       gpNormalizationParamInfo.push({ configKey: 'planktonMode', min: 0, max: 1 });
       gpNormalizationParamInfo.push({ configKey: 'preyKillPredatorsMode', min: 0, max: 1 });
       gpOptimizer = new SimpleGaussianProcess(gpNormalizationParamInfo);
+      rfRegressor = new SimpleRandomForest(gpNormalizationParamInfo);
 
       initBN(); // Initialize Bayesian Network structure
 
@@ -4750,7 +4885,9 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
         bnStarvPreds = predictStarvationRiskProbabilities(currentEffectiveConfig);
       }
       bnPredictionsForNextRun = { extinction: bnExtPreds, growth: bnGrowthPreds, starvationRisk: bnStarvPreds };
+      rfPredictionForNextRun = rfRegressor && rfRegressor.isReady() ? rfRegressor.predict(currentEffectiveConfig) : null;
       updateRunStartBNPredictionsDisplay();
+      updateRunStartRFPredictionDisplay();
       updateCurrentBNPredictionsDisplay(); // Show these predictions
       updateBnAccuracyDisplay();
 
