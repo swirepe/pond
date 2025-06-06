@@ -5234,6 +5234,10 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
     window.addEventListener('resize', () => {
       if (simulationViewContainer.style.display !== 'none') { // If simulation view is active
         canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+        quadtree = new Quadtree(0, 0, canvas.width, canvas.height);
+        plants.forEach(p => quadtree.insert(p));
+        prey.forEach(p => quadtree.insert(p));
+        predators.forEach(p => quadtree.insert(p));
         // Resize and redraw graphs if stats overlay is visible
         if (DOM_ELEMENTS.statsOverlay.classList.contains('visible')) {
           if (populationGraphCanvas.clientWidth > 0) populationGraphCanvas.width = populationGraphCanvas.clientWidth;
