@@ -938,6 +938,7 @@
     };
 
     const bnPredictionHistory = { // New history object for BN predictions
+      plantExtinctionProb: [],
       preyExtinctionProb: [],
       predatorExtinctionProb: [],
       favorableGrowthPreyProb: [],
@@ -1834,7 +1835,7 @@
 
     // Predicts extinction probabilities for given candidate parameters
     function predictExtinctionProbabilities(candidateBaseParams) {
-      const defaultPred = { prey: 0.5, predator: 0.5, error: "BN not ready or error" };
+      const defaultPred = { plant: 0.5, prey: 0.5, predator: 0.5, error: "BN not ready or error" };
       if (!isBNReady()) return defaultPred;
 
       const candidateFullParams = getFullParamsWithDerived(candidateBaseParams);
@@ -1853,6 +1854,7 @@
         return (node.cpt[cptKey] && node.cpt[cptKey]['true'] !== undefined) ? node.cpt[cptKey]['true'] : 0.5; // Prob of 'true'
       };
 
+      preds.plant = 1 - getProb(BN_NODE_NAMES.FAVORABLE_GROWTH_PLANT);
       preds.prey = getProb(BN_NODE_NAMES.PREY_EXTINCTION);
       preds.predator = getProb(BN_NODE_NAMES.PREDATOR_EXTINCTION);
       return preds;
@@ -3408,7 +3410,7 @@ function updateCurrentBNPredictionsDisplay() {
       autoPilotStats.lastGpVariance = bestCandidate.debug_gp_variance;
 
       bnPredictionsForNextRun = {
-        extinction: isBNReady() ? predictExtinctionProbabilities(bestCandidate.params) : { prey: 0.5, predator: 0.5, error: "BN not ready" },
+        extinction: isBNReady() ? predictExtinctionProbabilities(bestCandidate.params) : { plant: 0.5, prey: 0.5, predator: 0.5, error: "BN not ready" },
         growth: isBNReady() ? predictFavorableGrowth(bestCandidate.params) : { plant: 0.5, prey: 0.5, predator: 0.5, error: "BN not ready" },
         starvationRisk: isBNReady() ? predictStarvationRiskProbabilities(bestCandidate.params) : { prey: 0.5, predator: 0.5, error: "BN not ready" },
       };
@@ -3750,6 +3752,7 @@ function displayPastRunDetails(runIndex) {
         populateGraphLegend('pastCumulativeGraphLegend', cumHistories);
 
         const bnHistories = [
+            { data: runData.bnPredictionGraphHistory.plantExtinctionProb || [], color: getComputedCssVar(CSS_VARS.PLANT_COLOR), lineWidth: 1.5, label: "P(Plant Extinct)" },
             { data: runData.bnPredictionGraphHistory.preyExtinctionProb || [], color: getComputedCssVar(CSS_VARS.PREY_COLOR), lineWidth: 1.5, label: "P(Prey Extinct)" },
             { data: runData.bnPredictionGraphHistory.predatorExtinctionProb || [], color: getComputedCssVar(CSS_VARS.PREDATOR_COLOR), lineWidth: 1.5, label: "P(Pred Extinct)" },
             { data: runData.bnPredictionGraphHistory.favorableGrowthPreyProb || [], color: modifyHslColor(getComputedCssVar(CSS_VARS.PREY_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Prey Growth)" },
@@ -4139,9 +4142,11 @@ function displayPastRunDetails(runIndex) {
             const growthPredsHist = predictFavorableGrowth(paramsForLiveGraph);
 
             if (!extPredsHist.error) {
+                bnPredictionHistory.plantExtinctionProb.push(extPredsHist.plant);
                 bnPredictionHistory.preyExtinctionProb.push(extPredsHist.prey);
                 bnPredictionHistory.predatorExtinctionProb.push(extPredsHist.predator);
             } else {
+                bnPredictionHistory.plantExtinctionProb.push(0.5);
                 bnPredictionHistory.preyExtinctionProb.push(0.5);
                 bnPredictionHistory.predatorExtinctionProb.push(0.5);
             }
@@ -4510,6 +4515,7 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
     function drawBNPredictionGraph() {
       const yMax = 1.05; // Probabilities are 0-1, give a little padding
       const histories = [
+        { data: bnPredictionHistory.plantExtinctionProb, color: getComputedCssVar(CSS_VARS.PLANT_COLOR), lineWidth: 1.5, label: "P(Plant Extinct)", visible: true },
         { data: bnPredictionHistory.preyExtinctionProb, color: getComputedCssVar(CSS_VARS.PREY_COLOR), lineWidth: 1.5, label: "P(Prey Extinct)", visible: true },
         { data: bnPredictionHistory.predatorExtinctionProb, color: getComputedCssVar(CSS_VARS.PREDATOR_COLOR), lineWidth: 1.5, label: "P(Pred Extinct)", visible: true },
         { data: bnPredictionHistory.favorableGrowthPreyProb, color: modifyHslColor(getComputedCssVar(CSS_VARS.PREY_COLOR), 1, 1.2), lineWidth: 1.5, label: "P(Prey Growth)", visible: true },
