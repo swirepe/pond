@@ -787,6 +787,10 @@
     style="position: absolute; top: 60px; left: 20px; color: var(--text-color); font-size: 0.9em; background-color: var(--ui-bg-color); padding: 5px 10px; border-radius: 5px; border: 1px solid var(--ui-border-color); opacity:0;">
     Current Run: <span id="currentRunDisplay">1</span>
     &nbsp;| Exploration: <span id="explorationFactorDisplay">0.00</span>
+    <br>
+    Last AP Score: <span id="autoPilotLastScoreDisplay">0</span>
+    &nbsp;| Best AP Score: <span id="autoPilotBestScoreDisplay">0</span>
+    &nbsp;| BN Err Avg: <span id="bnErrorAvgDisplay">0.00</span>
   </div>
   </div>
 
@@ -1030,6 +1034,7 @@
       autoPilotStats.modelUncertainty = 0;
       if (DOM_ELEMENTS.explorationFactorDisplay)
         DOM_ELEMENTS.explorationFactorDisplay.textContent = '0.00';
+      updateAutoPilotStatsDisplay();
     }
 
     const BN_ERROR_HISTORY_LENGTH = 20;
@@ -3073,6 +3078,7 @@ function updateCurrentBNPredictionsDisplay() {
               drawBNPredictionErrorGraph();
             }
           }
+          updateAutoPilotStatsDisplay();
         }
       }
 
@@ -3624,6 +3630,20 @@ function updateBnAccuracyDisplay() {
       if (!DOM_ELEMENTS.bnAccuracyDisplay) return;
       const avgErr = getBnErrorAverage();
       DOM_ELEMENTS.bnAccuracyDisplay.textContent = isNaN(avgErr) ? 'N/A' : (1 - avgErr).toFixed(3);
+    }
+
+    function updateAutoPilotStatsDisplay() {
+      if (DOM_ELEMENTS.autoPilotLastScoreDisplay)
+        DOM_ELEMENTS.autoPilotLastScoreDisplay.textContent =
+          isFinite(autoPilotStats.lastScore) ? autoPilotStats.lastScore.toFixed(0) : 'N/A';
+      if (DOM_ELEMENTS.autoPilotBestScoreDisplay)
+        DOM_ELEMENTS.autoPilotBestScoreDisplay.textContent =
+          (autoPilotStats.bestScoreEver === -Infinity || isNaN(autoPilotStats.bestScoreEver))
+            ? 'N/A'
+            : autoPilotStats.bestScoreEver.toFixed(0);
+      if (DOM_ELEMENTS.bnErrorAvgDisplay)
+        DOM_ELEMENTS.bnErrorAvgDisplay.textContent =
+          isNaN(autoPilotStats.bnPredictionErrorAvg) ? 'N/A' : autoPilotStats.bnPredictionErrorAvg.toFixed(3);
     }
 
     function formatBNPredictionSummary(preds) {
@@ -4932,6 +4952,7 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
         'planktonMode', 'preyKillPredatorsMode', 'showTargetLines', 'simulationSpeed', 'simulationSpeedValue',
         'exportRunsButton', 'importRunsFile', 'resetSimulation', 'autoPilotRun',
         'pastRunsToggleMain', 'currentRunInfo', 'currentRunDisplay', 'explorationFactorDisplay',
+        'autoPilotLastScoreDisplay', 'autoPilotBestScoreDisplay', 'bnErrorAvgDisplay',
         'backToSimulationButton', 'noPastRunsMessage', 'pastRunsSummaryList', 'pastRunDetails',
         'pastRunNumberDisplay', 'pastRunScoreDisplay', 'pastRunAutoPilotScoreDisplay',
         'pastRunParamsDisplay', 'pastRunStatsDisplay',
@@ -5029,6 +5050,7 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
       updateRunStartBNPredictionsDisplay();
       updateCurrentBNPredictionsDisplay(); // Show these predictions
       updateBnAccuracyDisplay();
+      updateAutoPilotStatsDisplay();
 
       // Start the first run with the initial (potentially URL-modified) config
       startNewRun(currentEffectiveConfig);
