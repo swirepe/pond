@@ -762,6 +762,7 @@
       <label for="preyKillPredatorsMode"><input type="checkbox" id="preyKillPredatorsMode"> Prey Can Kill
         Predators</label>
       <label for="showTargetLines"><input type="checkbox" id="showTargetLines"> Show Target Lines</label>
+      <label for="showSpatialGrid"><input type="checkbox" id="showSpatialGrid"> Show Quadtree Grid</label>
       <label for="simulationSpeed" class="mt-2">Sim Speed: <span id="simulationSpeedValue">1.0</span>x</label>
       <input type="range" id="simulationSpeed" min="0.1" max="20.0" value="1.0" step="0.1">
     </div>
@@ -959,6 +960,92 @@
     let plants = [];
     let prey = [];
     let predators = [];
+
+    const QUADTREE_CAPACITY = 4;
+    class Quadtree {
+      constructor(x, y, w, h, capacity = QUADTREE_CAPACITY, depth = 0) {
+        this.boundary = { x, y, w, h };
+        this.capacity = capacity;
+        this.points = [];
+        this.divided = false;
+        this.children = [];
+        this.depth = depth;
+      }
+      contains(x, y) {
+        return (
+          x >= this.boundary.x &&
+          x < this.boundary.x + this.boundary.w &&
+          y >= this.boundary.y &&
+          y < this.boundary.y + this.boundary.h
+        );
+      }
+      insert(entity) {
+        if (!this.contains(entity.pos.x, entity.pos.y)) return false;
+        if (this.points.length < this.capacity && !this.divided) {
+          this.points.push(entity);
+          entity._qtNode = this;
+          return true;
+        }
+        if (!this.divided) this.subdivide();
+        return this.children.some(child => child.insert(entity));
+      }
+      subdivide() {
+        const { x, y, w, h } = this.boundary;
+        const hw = w / 2, hh = h / 2;
+        this.children = [
+          new Quadtree(x, y, hw, hh, this.capacity, this.depth + 1),
+          new Quadtree(x + hw, y, hw, hh, this.capacity, this.depth + 1),
+          new Quadtree(x, y + hh, hw, hh, this.capacity, this.depth + 1),
+          new Quadtree(x + hw, y + hh, hw, hh, this.capacity, this.depth + 1)
+        ];
+        const pts = this.points;
+        this.points = [];
+        this.divided = true;
+        pts.forEach(p => this.insert(p));
+      }
+      remove(entity) {
+        if (!entity._qtNode) return;
+        const arr = entity._qtNode.points;
+        const idx = arr.indexOf(entity);
+        if (idx !== -1) arr.splice(idx, 1);
+        entity._qtNode = null;
+      }
+      update(entity) { this.remove(entity); this.insert(entity); }
+      queryCircle(x, y, r, found = []) {
+        if (!this.intersectsCircle(x, y, r)) return found;
+        for (const p of this.points) {
+          const dx = p.pos.x - x, dy = p.pos.y - y;
+          if (dx * dx + dy * dy <= r * r) found.push(p);
+        }
+        if (this.divided) this.children.forEach(c => c.queryCircle(x, y, r, found));
+        return found;
+      }
+      intersectsCircle(x, y, r) {
+        const bx = this.boundary.x, by = this.boundary.y;
+        const bw = this.boundary.w, bh = this.boundary.h;
+        const closestX = Math.max(bx, Math.min(x, bx + bw));
+        const closestY = Math.max(by, Math.min(y, by + bh));
+        const dx = x - closestX;
+        const dy = y - closestY;
+        return dx * dx + dy * dy <= r * r;
+      }
+      clear() {
+        this.points = [];
+        if (this.divided) this.children.forEach(c => c.clear());
+        this.children = [];
+        this.divided = false;
+      }
+      forEachNode(cb) {
+        cb(this);
+        if (this.divided) this.children.forEach(c => c.forEachNode(cb));
+      }
+    }
+
+    let quadtree;
+
+    function addPlant(p) { plants.push(p); quadtree.insert(p); }
+    function addPreyEntity(p) { prey.push(p); quadtree.insert(p); }
+    function addPredatorEntity(p) { predators.push(p); quadtree.insert(p); }
 
     let animationFrameId;
     let lastTimestamp = 0;
@@ -2058,11 +2145,14 @@ function updateCurrentBNPredictionsDisplay() {
       // Interaction & Visuals
       preyKillPredatorsMode: false, preyMinGroupToAttack: 3, preyGroupKillDuration: 180, // frames
       showTargetLines: true,
+      showSpatialGrid: false,
       birthAnimationDuration: 45, // frames
       deathAnimationDuration: 60, // frames
     };
     config.preyVisionRadiusSq = config.preyVisionRadius * config.preyVisionRadius;
     config.predatorVisionRadiusSq = config.predatorVisionRadius * config.predatorVisionRadius;
+
+
 
     let allSliderControls = []; // To store info about sliders for easier updates
     // Parameters tunable by the autopilot
@@ -2214,6 +2304,7 @@ function updateCurrentBNPredictionsDisplay() {
             this.animationProgress = 0;
             break;
           case 'dead':
+            quadtree.remove(this);
             return false; // Indicates entity should be removed
         }
 
@@ -2236,6 +2327,7 @@ function updateCurrentBNPredictionsDisplay() {
           this.vel.limit(this.maxSpeed);
           this.pos.add(this.vel);
           this.keepInBounds();
+          quadtree.update(this);
         }
         return true; // Still in simulation
       }
@@ -2263,7 +2355,9 @@ function updateCurrentBNPredictionsDisplay() {
         newY = Math.max(newPlantRadius, Math.min(canvas.height - newPlantRadius, newY));
 
         let overlaps = false;
-        for (const p of plants) {
+        const nearby = quadtree.queryCircle(newX, newY, newPlantRadius + separationMargin);
+        for (const p of nearby) {
+          if (p.type !== 'plant') continue;
           if (distanceSq(newX, newY, p.pos.x, p.pos.y) < (newPlantRadius + p.radius + separationMargin) ** 2) {
             overlaps = true;
             break;
@@ -2279,6 +2373,7 @@ function updateCurrentBNPredictionsDisplay() {
     class Plant extends Entity {
       constructor(x, y) {
         super(x, y, 3);
+        this.type = 'plant';
         this.health = config.plantHealth;
         this.baseColor = parseHslString(getComputedCssVar(CSS_VARS.PLANT_COLOR));
         this.color = this.baseColor; // Stored as HSL object
@@ -2321,8 +2416,10 @@ function updateCurrentBNPredictionsDisplay() {
 
         if (this.animationState === 'alive' && Math.random() < config.plantReproduceRate && plants.length < config.maxEntities * 0.6) {
           let nearbyPlantsInArea = 0;
-          for (const otherPlant of plants) {
-            if (otherPlant !== this && distanceSq(this.pos.x, this.pos.y, otherPlant.pos.x, otherPlant.pos.y) < config.plantMaxDensityRadius * config.plantMaxDensityRadius) {
+          const nearbyPlants = quadtree.queryCircle(this.pos.x, this.pos.y, config.plantMaxDensityRadius);
+          for (const otherPlant of nearbyPlants) {
+            if (otherPlant.type !== 'plant' || otherPlant === this) continue;
+            if (distanceSq(this.pos.x, this.pos.y, otherPlant.pos.x, otherPlant.pos.y) < config.plantMaxDensityRadius * config.plantMaxDensityRadius) {
               nearbyPlantsInArea++;
             }
           }
@@ -2332,7 +2429,7 @@ function updateCurrentBNPredictionsDisplay() {
             const spot = findNonOverlappingSpot(this.pos, config.plantSpawnSearchDist, config.plantSpawnMaxAttempts, newPlantObj.radius, config.plantSpawnSeparationMargin);
             if (spot) {
               const newPlant = new Plant(spot.x, spot.y);
-              plants.push(newPlant);
+              addPlant(newPlant);
               totalPlantBirths++;
             }
           }
@@ -2391,6 +2488,7 @@ function updateCurrentBNPredictionsDisplay() {
     class Prey extends Entity {
       constructor(x, y) {
         super(x, y, config.preyRadius);
+        this.type = 'prey';
         this.health = config.preyHealth;
         this.maxSpeed = config.preyMaxSpeed;
         this.agility = config.preyAgility;
@@ -2414,8 +2512,30 @@ function updateCurrentBNPredictionsDisplay() {
       getEffectiveAgility(baseMultiplier = 1.0) { return (this.agility * baseMultiplier) / (1 + this.inertiaEffectStrength * this.vel.mag()); }
       seek(targetPos) { const desired = new Vector(targetPos.x - this.pos.x, targetPos.y - this.pos.y); if (desired.magSq() === 0) return new Vector(0, 0); desired.normalize().mult(this.maxSpeed); const steer = new Vector(desired.x - this.vel.x, desired.y - this.vel.y); steer.limit(this.getEffectiveAgility()); return steer; }
       flee(targetPos) { const desired = new Vector(this.pos.x - targetPos.x, this.pos.y - targetPos.y); if (desired.magSq() === 0) return Vector.random2D().mult(this.getEffectiveAgility(1.5)); desired.normalize().mult(this.maxSpeed); const steer = new Vector(desired.x - this.vel.x, desired.y - this.vel.y); steer.limit(this.getEffectiveAgility(1.5)); return steer; }
-      findFood() { let closestFood = null, closestDistSq = Infinity; const visionRadiusSq = config.preyVisionRadiusSq; for (const plant of plants) { if (plant.health <= 0 || plant.animationState === 'dying' || plant.animationState === 'dead') continue; const dSq = distanceSq(this.pos.x, this.pos.y, plant.pos.x, plant.pos.y); if (dSq < closestDistSq && dSq < visionRadiusSq) { closestDistSq = dSq; closestFood = plant; } } return closestFood; }
-      findPredator() { let closestPredator = null, closestDistSq = Infinity; const visionRadiusSq = config.preyVisionRadiusSq * (0.75 * 0.75); for (const predator of predators) { if (predator.animationState === 'dying' || predator.animationState === 'dead') continue; const dSq = distanceSq(this.pos.x, this.pos.y, predator.pos.x, predator.pos.y); if (dSq < closestDistSq && dSq < visionRadiusSq) { closestDistSq = dSq; closestPredator = predator; } } return closestPredator; }
+      findFood() {
+        let closestFood = null, closestDistSq = Infinity;
+        const visionRadius = config.preyVisionRadius;
+        const visionRadiusSq = config.preyVisionRadiusSq;
+        for (const ent of quadtree.queryCircle(this.pos.x, this.pos.y, visionRadius)) {
+          if (ent.type !== 'plant') continue;
+          if (ent.health <= 0 || ent.animationState === 'dying' || ent.animationState === 'dead') continue;
+          const dSq = distanceSq(this.pos.x, this.pos.y, ent.pos.x, ent.pos.y);
+          if (dSq < closestDistSq && dSq < visionRadiusSq) { closestDistSq = dSq; closestFood = ent; }
+        }
+        return closestFood;
+      }
+      findPredator() {
+        let closestPredator = null, closestDistSq = Infinity;
+        const visionRadius = config.preyVisionRadius * 0.75;
+        const visionRadiusSq = visionRadius * visionRadius;
+        for (const ent of quadtree.queryCircle(this.pos.x, this.pos.y, visionRadius)) {
+          if (ent.type !== 'predator') continue;
+          if (ent.animationState === 'dying' || ent.animationState === 'dead') continue;
+          const dSq = distanceSq(this.pos.x, this.pos.y, ent.pos.x, ent.pos.y);
+          if (dSq < closestDistSq && dSq < visionRadiusSq) { closestDistSq = dSq; closestPredator = ent; }
+        }
+        return closestPredator;
+      }
 
       update() {
         if (!super.update()) return false; // Base handles animation state
@@ -2511,7 +2631,7 @@ function updateCurrentBNPredictionsDisplay() {
           this.health -= config.preyReproductionCost;
           const offspring = new Prey(this.pos.x + random(-5, 5), this.pos.y + random(-5, 5));
           offspring.health = config.preyHealth / 2;
-          prey.push(offspring);
+          addPreyEntity(offspring);
           totalPreyBirths++;
           this.reproductionCooldown = config.preyReproductionCooldown;
         }
@@ -2628,6 +2748,7 @@ function updateCurrentBNPredictionsDisplay() {
     class Predator extends Entity {
       constructor(x, y) {
         super(x, y, config.predatorRadius);
+        this.type = 'predator';
         this.health = config.predatorHealth;
         this.maxSpeed = config.predatorMaxSpeed;
         this.agility = config.predatorAgility;
@@ -2652,7 +2773,18 @@ function updateCurrentBNPredictionsDisplay() {
       getEffectiveAgility(baseMultiplier = 1.0) { return (this.agility * baseMultiplier) / (1 + this.inertiaEffectStrength * this.vel.mag()); }
       seek(targetPos) { const desired = new Vector(targetPos.x - this.pos.x, targetPos.y - this.pos.y); if (desired.magSq() === 0) return new Vector(0, 0); desired.normalize().mult(this.maxSpeed); const steer = new Vector(desired.x - this.vel.x, desired.y - this.vel.y); steer.limit(this.getEffectiveAgility()); return steer; }
       flee(targetPos) { const desired = new Vector(this.pos.x - targetPos.x, this.pos.y - targetPos.y); if (desired.magSq() === 0) return Vector.random2D().mult(this.getEffectiveAgility(1.2)); desired.normalize().mult(this.maxSpeed); const steer = new Vector(desired.x - this.vel.x, desired.y - this.vel.y); steer.limit(this.getEffectiveAgility(1.2)); return steer; }
-      findFood() { let closestFood = null, closestDistSq = Infinity; const visionRadiusSq = config.predatorVisionRadiusSq; for (const p of prey) { if (p.animationState === 'dying' || p.animationState === 'dead') continue; const dSq = distanceSq(this.pos.x, this.pos.y, p.pos.x, p.pos.y); if (dSq < closestDistSq && dSq < visionRadiusSq) { closestDistSq = dSq; closestFood = p; } } return closestFood; }
+      findFood() {
+        let closestFood = null, closestDistSq = Infinity;
+        const visionRadius = config.predatorVisionRadius;
+        const visionRadiusSq = config.predatorVisionRadiusSq;
+        for (const ent of quadtree.queryCircle(this.pos.x, this.pos.y, visionRadius)) {
+          if (ent.type !== 'prey') continue;
+          if (ent.animationState === 'dying' || ent.animationState === 'dead') continue;
+          const dSq = distanceSq(this.pos.x, this.pos.y, ent.pos.x, ent.pos.y);
+          if (dSq < closestDistSq && dSq < visionRadiusSq) { closestDistSq = dSq; closestFood = ent; }
+        }
+        return closestFood;
+      }
 
       update() {
         if (!super.update()) return false;
@@ -2757,7 +2889,7 @@ function updateCurrentBNPredictionsDisplay() {
           this.health -= config.predatorReproductionCost;
           const offspring = new Predator(this.pos.x + random(-5, 5), this.pos.y + random(-5, 5));
           offspring.health = config.predatorHealth / 2;
-          predators.push(offspring);
+          addPredatorEntity(offspring);
           totalPredatorBirths++;
           this.reproductionCooldown = config.predatorReproductionCooldown;
         }
@@ -2883,6 +3015,10 @@ function updateCurrentBNPredictionsDisplay() {
       DOM_ELEMENTS.preyKillPredatorsMode.addEventListener('change', (e) => { config.preyKillPredatorsMode = e.target.checked; updateCurrentBNPredictionsDisplay(); });
       DOM_ELEMENTS.showTargetLines.checked = config.showTargetLines;
       DOM_ELEMENTS.showTargetLines.addEventListener('change', (e) => { config.showTargetLines = e.target.checked; });
+      DOM_ELEMENTS.showSpatialGrid.checked = config.showSpatialGrid;
+      DOM_ELEMENTS.showSpatialGrid.addEventListener('change', (e) => {
+        config.showSpatialGrid = e.target.checked;
+      });
 
       // Simulation Speed Slider
       const simSpeedSlider = DOM_ELEMENTS.simulationSpeed;
@@ -3119,6 +3255,7 @@ function updateCurrentBNPredictionsDisplay() {
       // Explicitly update boolean config flags if not covered by loop (e.g. if key wasn't in parametersToUse but in config)
       if (DOM_ELEMENTS.planktonMode) DOM_ELEMENTS.planktonMode.checked = config.planktonMode;
       if (DOM_ELEMENTS.preyKillPredatorsMode) DOM_ELEMENTS.preyKillPredatorsMode.checked = config.preyKillPredatorsMode;
+      if (DOM_ELEMENTS.showSpatialGrid) DOM_ELEMENTS.showSpatialGrid.checked = config.showSpatialGrid;
       if (DOM_ELEMENTS.simulationSpeed && DOM_ELEMENTS.simulationSpeedValue) {
         DOM_ELEMENTS.simulationSpeed.value = config.simulationSpeedMultiplier;
         DOM_ELEMENTS.simulationSpeedValue.textContent = config.simulationSpeedMultiplier.toFixed(1);
@@ -3923,6 +4060,7 @@ function displayPastRunDetails(runIndex) {
 
     function resetSimulation() {
       plants = []; prey = []; predators = []; entities = [];
+      quadtree = new Quadtree(0, 0, canvas.width, canvas.height);
       Object.keys(populationHistory).forEach(key => { if (key !== 'maxLength') populationHistory[key] = []; });
       Object.keys(cumulativeHistory).forEach(key => { if (key !== 'maxLength') cumulativeHistory[key] = []; });
       Object.keys(bnPredictionHistory).forEach(key => { // Clear BN prediction history
@@ -3956,7 +4094,9 @@ function displayPastRunDetails(runIndex) {
           const candidateX = random(newPlantRadius, canvas.width - newPlantRadius);
           const candidateY = random(newPlantRadius, canvas.height - newPlantRadius);
           let overlaps = false;
-          for (const p of plants) { // Check against already placed plants
+          const nearby = quadtree.queryCircle(candidateX, candidateY, newPlantRadius + config.plantSpawnSeparationMargin);
+          for (const p of nearby) {
+            if (p.type !== 'plant') continue;
             if (distanceSq(candidateX, candidateY, p.pos.x, p.pos.y) < (newPlantRadius + p.radius + config.plantSpawnSeparationMargin) ** 2) {
               overlaps = true;
               break;
@@ -3969,7 +4109,7 @@ function displayPastRunDetails(runIndex) {
         }
 
         if (spot) {
-          plants.push(new Plant(spot.x, spot.y));
+          addPlant(new Plant(spot.x, spot.y));
           placedPlantsCount++;
         } else {
           // console.warn(`Could not place initial plant ${i+1} with sufficient separation after ${MAX_INITIAL_PLACEMENT_ATTEMPTS} attempts. Target: ${config.initialPlants}, Placed: ${placedPlantsCount}`);
@@ -3983,8 +4123,8 @@ function displayPastRunDetails(runIndex) {
       if (placedPlantsCount < config.initialPlants) {
         // console.log(`Successfully placed ${placedPlantsCount} out of ${config.initialPlants} requested initial plants with separation.`);
       }
-      for (let i = 0; i < config.initialPrey; i++) prey.push(new Prey(random(0, canvas.width), random(0, canvas.height)));
-      for (let i = 0; i < config.initialPredators; i++) predators.push(new Predator(random(0, canvas.width), random(0, canvas.height)));
+      for (let i = 0; i < config.initialPrey; i++) addPreyEntity(new Prey(random(0, canvas.width), random(0, canvas.height)));
+      for (let i = 0; i < config.initialPredators; i++) addPredatorEntity(new Predator(random(0, canvas.width), random(0, canvas.height)));
     }
 
     function updateEntities() {
@@ -4233,6 +4373,20 @@ function displayPastRunDetails(runIndex) {
       plants.forEach(p => p.draw());
       prey.forEach(p => p.draw());
       predators.forEach(p => p.draw());
+
+      if (config.showSpatialGrid) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+        ctx.lineWidth = 0.5;
+        ctx.fillStyle = 'rgba(255,255,255,0.05)';
+        quadtree.forEachNode(node => {
+          if (node.points.length > 0) {
+            ctx.fillRect(node.boundary.x, node.boundary.y, node.boundary.w, node.boundary.h);
+          }
+          ctx.strokeRect(node.boundary.x, node.boundary.y, node.boundary.w, node.boundary.h);
+        });
+        ctx.restore();
+      }
 
       if (config.showTargetLines) {
         ctx.save();
@@ -4733,13 +4887,20 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
           label: "P(Prey Starv. Risk)", 
           visible: true 
         },
-        { 
-          data: bnPredictionHistory.predatorStarvationRiskProb, 
-          color: modifyHslColor(getComputedCssVar(CSS_VARS.PREDATOR_COLOR), 0.8, 0.8), 
-          lineWidth: 1.5, 
-          label: "P(Pred Starv. Risk)", 
-          visible: true 
-  }
+        {
+          data: bnPredictionHistory.predatorStarvationRiskProb,
+          color: modifyHslColor(getComputedCssVar(CSS_VARS.PREDATOR_COLOR), 0.8, 0.8),
+          lineWidth: 1.5,
+          label: "P(Pred Starv. Risk)",
+          visible: true
+        }
+      ];
+
+      drawGenericGraph(bnPredictionGraphCtx, bnPredictionGraphCanvas, histories, bnPredictionHistory.maxLength, yMax, true);
+      if (DOM_ELEMENTS.bnPredictionGraphLegend) {
+        populateGraphLegend('bnPredictionGraphLegend', histories, drawBNPredictionGraph);
+      }
+    }
 
     function drawBNPredictionExtinctionGraph() {
       const yMax = 1.05;
@@ -4776,14 +4937,6 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
       drawGenericGraph(bnPredictionStarvationGraphCtx, bnPredictionStarvationGraphCanvas, histories, bnPredictionHistory.maxLength, yMax, true);
       if (DOM_ELEMENTS.bnPredictionStarvationGraphLegend) {
         populateGraphLegend('bnPredictionStarvationGraphLegend', histories, drawBNPredictionStarvationGraph);
-      }
-    }
-      ];
-
-      drawGenericGraph(bnPredictionGraphCtx, bnPredictionGraphCanvas, histories, bnPredictionHistory.maxLength, yMax, true);
-
-      if (DOM_ELEMENTS.bnPredictionGraphLegend) {
-        populateGraphLegend('bnPredictionGraphLegend', histories, drawBNPredictionGraph);
       }
     }
 
@@ -4959,7 +5112,7 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
         'bnCurrentPreyExtinctionPrediction', 'bnCurrentPredatorExtinctionPrediction',
         'bnCurrentPlantGrowthPrediction', 'bnCurrentPreyGrowthPrediction', 'bnCurrentPredatorGrowthPrediction',
         'bnCurrentPreyStarvationRiskPrediction', 'bnCurrentPredStarvationRiskPrediction', // New DOM elements
-        'planktonMode', 'preyKillPredatorsMode', 'showTargetLines', 'simulationSpeed', 'simulationSpeedValue',
+        'planktonMode', 'preyKillPredatorsMode', 'showTargetLines', 'showSpatialGrid', 'simulationSpeed', 'simulationSpeedValue',
         'exportRunsButton', 'importRunsFile', 'resetSimulation', 'autoPilotRun',
         'pastRunsToggleMain', 'currentRunInfo', 'currentRunDisplay', 'explorationFactorDisplay',
         'autoPilotLastScoreDisplay', 'autoPilotBestScoreDisplay', 'bnErrorAvgDisplay',
@@ -5023,6 +5176,7 @@ function wrapAndDrawText(ctxLocal, text, x, y, maxWidth, baseFontSize, detailFon
     function init() {
       cacheDOMElements();
       canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+      quadtree = new Quadtree(0, 0, canvas.width, canvas.height);
       document.body.style.overflow = 'hidden'; // Default to hidden for sim view
 
       getUrlParams(); // Apply URL params like ?hue=...
